@@ -1,0 +1,47 @@
+# Model Configuration for Elderly AI Monitor
+
+detector:
+  architecture: "yolov8"
+  model_name: "yolov8s.pt"
+  weights_path: "models/detector/yolov8s.pt"
+  conf_threshold: 0.40
+  iou_threshold: 0.50
+  target_classes: [0] # 0 = person
+  img_size: 640
+
+tracker:
+  type: "bytetrack"
+  track_high_thresh: 0.50
+  track_low_thresh: 0.15
+  new_track_thresh: 0.60
+  match_thresh: 0.70
+  track_buffer_frames: 60
+  frame_rate: 15
+
+pose:
+  architecture: "yolov8_pose"
+  model_name: "yolov8s-pose.pt"
+  weights_path: "models/pose/yolov8s-pose.pt"
+  conf_threshold: 0.35
+  num_keypoints: 17
+  img_size: 640
+
+temporal:
+  architecture: "st_transformer" # st_transformer or tcn
+  weights_path: "models/action/best_st_transformer.pt"
+  window_size: 30 # 30 frames ~ 2.0s at 15 FPS
+  stride: 5
+  num_classes: 10
+  feature_dim: 51 # 17 keypoints * 3 (x, y, conf)
+  hidden_dim: 128
+  num_layers: 4
+  num_heads: 4
+  dropout: 0.15
+
+anomaly:
+  architecture: "pose_autoencoder"
+  weights_path: "models/anomaly/best_pose_autoencoder.pt"
+  window_size: 30
+  feature_dim: 51
+  latent_dim: 64
+  reconstruction_metric: "l1"

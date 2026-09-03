@@ -1,0 +1,44 @@
+# Camera & Input Stream Configuration
+
+source_type: "webcam" # "webcam", "rtsp", "video"
+
+webcam:
+  device_index: 0
+  width: 1280
+  height: 720
+  fps: 30
+  api_preference: "default" # "dshow" on windows, "v4l2" on linux, or "default"
+
+rtsp:
+  url: "rtsp://admin:password@192.168.1.100:554/Streaming/Channels/101"
+  reconnect_delay_seconds: 2.0
+  max_reconnect_attempts: 10
+  buffer_size: 1 # minimal internal buffer to avoid lag
+
+video:
+  path: "data/videos/sample_adl_fall.mp4"
+  loop: false
+  simulate_realtime: true
+
+buffer:
+  max_queue_size: 1 # minimal zero-lag queue
+
+# Multi-Camera Configuration (Khả năng mở rộng nhiều camera đồng thời)
+multi_camera:
+  enabled: false
+  cameras:
+    - id: "cam_living_room"
+      name: "Living Room (Phòng khách)"
+      type: "webcam"
+      uri: 0
+      enabled: true
+    - id: "cam_bedroom"
+      name: "Bedroom (Phòng ngủ)"
+      type: "rtsp"
+      uri: "rtsp://admin:password@192.168.1.101:554/stream1"
+      enabled: false
+    - id: "cam_kitchen"
+      name: "Kitchen (Nhà bếp)"
+      type: "rtsp"
+      uri: "rtsp://admin:password@192.168.1.102:554/stream1"
+      enabled: false

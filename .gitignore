@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# PyTorch and Model Weights
+*.pt
+*.pth
+*.onnx
+*.engine
+*.bin
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+models/detector/*
+!models/detector/.gitkeep
+models/pose/*
+!models/pose/.gitkeep
+models/action/*
+!models/action/.gitkeep
+models/temporal/*
+!models/temporal/.gitkeep
+models/anomaly/*
+!models/anomaly/.gitkeep
+
+# Data & Video Files
+data/raw/*
+!data/raw/.gitkeep
+data/videos/*
+!data/videos/.gitkeep
+data/frames/*
+!data/frames/.gitkeep
+data/poses/*
+!data/poses/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+datasets/*/*
+!datasets/*/.gitkeep
+
+# Environment variables
+.env
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Evaluation results & logs
+runs/
+logs/
+results/
+*.log

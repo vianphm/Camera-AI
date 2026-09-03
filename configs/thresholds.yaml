@@ -1,0 +1,25 @@
+# Risk Scoring & Event State Machine Thresholds
+
+risk_weights:
+  action_prob: 0.40       # Weight for supervised action classifier (falling, immobile, etc.)
+  anomaly_score: 0.25     # Weight for unsupervised pose autoencoder
+  kinematics: 0.20        # Weight for physical drop speed, aspect ratio, torso angle
+  immobility: 0.15        # Weight for post-fall immobility index
+
+state_machine:
+  # Risk Score thresholds: [0.0, 1.0]
+  thresh_suspicious: 0.55
+  thresh_abnormal: 0.72
+  thresh_high_risk: 0.85
+
+  # Temporal confirmation & hysteresis durations (in seconds)
+  min_duration_suspicious: 0.5
+  min_duration_abnormal: 1.5
+  min_duration_high_risk: 2.5
+  min_recovery_duration: 3.0    # Seconds of normal behavior needed to reset state
+
+alerts:
+  cooldown_seconds: 60.0        # Prevent repeated alarms within 60 seconds for same track
+  max_unacknowledged_alerts: 5
+  auto_escalate_after_seconds: 180.0
+  non_diagnostic_message: "Possible medical emergency / abnormal behavior detected. Please check the person."

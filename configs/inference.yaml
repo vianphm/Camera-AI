@@ -1,0 +1,27 @@
+# Runtime Inference Configuration
+
+runtime:
+  device: "cuda" # cuda or cpu
+  use_fp16: true
+  batch_size: 1
+  num_workers: 2
+  target_fps: 15
+  sync_mode: false
+
+display:
+  show_ui: true
+  window_name: "Elderly AI Monitor - Realtime Stream"
+  show_bbox: true
+  show_skeleton: true
+  show_track_id: true
+  show_action_label: true
+  show_risk_gauge: true
+  show_fps_meter: true
+  show_evidence: true
+
+privacy:
+  blur_faces: false  # Tắt làm mờ mặt trên giao diện Realtime Stream theo yêu cầu
+  blur_kernel_size: 25
+  save_snapshots: true
+  snapshot_dir: "data/processed/snapshots"
+  retention_days: 7

@@ -1,0 +1,51 @@
+# Training Pipeline Configuration
+
+training:
+  seed: 42
+  device: "cuda"
+  precision: "fp16"
+  num_workers: 4
+
+  dataset:
+    manifest_path: "data/annotations/dataset_manifest.json"
+    train_split: "data/splits/train.jsonl"
+    val_split: "data/splits/val.jsonl"
+    test_split: "data/splits/test.jsonl"
+    sequence_length: 30
+    num_keypoints: 17
+
+  action_model:
+    architecture: "st_transformer"
+    epochs: 75
+    batch_size: 64
+    learning_rate: 0.001
+    weight_decay: 0.0001
+    lr_scheduler: "cosine"
+    warmup_epochs: 5
+    early_stopping_patience: 15
+    focal_loss_gamma: 2.0
+    class_weights:
+      walking: 1.0
+      standing: 1.0
+      sitting: 1.0
+      lying: 1.2
+      bending: 1.5
+      falling: 3.0
+      getting_up: 1.5
+      stumbling: 2.5
+      abnormal_movement: 2.5
+      immobile: 3.0
+
+  anomaly_model:
+    architecture: "pose_autoencoder"
+    epochs: 50
+    batch_size: 128
+    learning_rate: 0.0005
+    latent_dim: 64
+    early_stopping_patience: 10
+
+logging:
+  use_tensorboard: true
+  checkpoint_dir: "models/checkpoints"
+  save_best_only: true
+  monitor_metric: "val_fall_recall"
