@@ -1,0 +1,33 @@
+# Engineering QA Targets and Pass/Warning/Fail Thresholds
+# NOTE: These are strictly engineering system performance metrics, NOT medical diagnostic standards.
+
+realtime:
+  frame_age_ms:
+    pass_max: 100.0       # ms
+    warning_max: 250.0    # ms
+  pipeline_latency_ms:
+    pass_max: 200.0       # ms
+    warning_max: 500.0    # ms
+  alert_latency_ms:
+    pass_max: 1000.0      # ms
+    warning_max: 2500.0   # ms
+  min_pipeline_fps:
+    pass_min: 15.0        # FPS
+    warning_min: 10.0     # FPS
+
+freshness:
+  max_queue_depth:
+    pass_max: 1
+    warning_max: 3
+  max_stale_drop_rate_pct: 100.0 # Under overload, dropping stale frames is desired behavior
+
+tracking:
+  max_id_switches_per_scenario: 0
+
+temporal:
+  min_immobility_duration_s: 2.0
+  max_single_frame_glitch_risk: 0.35 # Glitch should not escalate past NORMAL/SUSPICIOUS
+
+alerts:
+  max_duplicate_alerts_per_event: 1
+  min_cooldown_seconds: 5.0

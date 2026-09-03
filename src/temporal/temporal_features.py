@@ -79,51 +79,63 @@ class TemporalFeatureExtractor:
                 y = (s.bbox[1] + s.bbox[3]) / 2.0
             hip_y_series.append(y)
 
-        # Velocity: pixels / sec normalized by person height
+        # Velocity and Acceleration: computed across the window to capture rapid drop peaks
         height_ref = max(30.0, curr_bh)
-        v_y = (hip_y_series[-1] - hip_y_series[-2]) / (height_ref * dt)
+        v_series = []
+        for i in range(1, len(hip_y_series)):
+            frame_dt = max(1e-3, snapshots[i].timestamp - snapshots[i-1].timestamp)
+            v = (hip_y_series[i] - hip_y_series[i-1]) / (height_ref * frame_dt)
+            v_series.append(v)
 
-        # Acceleration: rate of velocity change
-        if len(hip_y_series) >= 3:
-            v_prev = (hip_y_series[-2] - hip_y_series[-3]) / (height_ref * dt)
-            a_y = (v_y - v_prev) / dt
-        else:
-            a_y = 0.0
+        curr_v_y = v_series[-1] if v_series else 0.0
+        peak_v_y = max(v_series) if v_series else 0.0
+
+        a_series = []
+        for i in range(1, len(v_series)):
+            frame_dt = max(1e-3, snapshots[i+1].timestamp - snapshots[i].timestamp)
+            a = (v_series[i] - v_series[i-1]) / frame_dt
+            a_series.append(a)
+
+        curr_a_y = a_series[-1] if a_series else 0.0
+        peak_a_y = max(a_series) if a_series else 0.0
 
         # 3. Torso angle and angular velocity
         torso_angle_curr = curr.torso_angle
         torso_angle_velocity = (curr.torso_angle - past.torso_angle) / max(1e-3, curr.timestamp - past.timestamp)
 
         # 4. Immobility Index: measure lack of movement across recent frames (last 2-5s)
-        # Low motion variance => high immobility index
         window_pts = [s.normalized_keypoints[:, :2] for s in snapshots[-min(n, int(self.fps * 3)):]]
         if len(window_pts) >= 3:
             pts_arr = np.array(window_pts)  # (N, 17, 2)
-            # Std deviation across time axis
             motion_std = float(np.mean(np.std(pts_arr, axis=0)))
-            # When motion_std is very small (<0.04), person is virtually immobile
             immobility_index = float(np.clip(1.0 - (motion_std / 0.08), 0.0, 1.0))
         else:
             immobility_index = 0.0
 
-        # 5. Drop Severity Score: heuristic combination of rapid drop & horizontal posture
-        # High score if:
-        # a) Downward velocity/acceleration was high
-        # b) Posture is now horizontal (aspect ratio > 1.0 or torso angle > 60 deg)
-        posture_horiz_factor = np.clip((torso_angle_curr - 30.0) / 45.0, 0.0, 1.0)
-        aspect_ratio_factor = np.clip((aspect_ratio_curr - 0.7) / 0.8, 0.0, 1.0)
-        drop_velocity_factor = np.clip(v_y / 2.5, 0.0, 1.0)
+        # 5. Drop Severity Score: requires both horizontal posture AND dynamic drop evidence in window
+        posture_horiz_factor = float(np.clip((torso_angle_curr - 30.0) / 45.0, 0.0, 1.0))
+        aspect_ratio_factor = float(np.clip((aspect_ratio_curr - 0.7) / 0.8, 0.0, 1.0))
+        is_horizontal = max(posture_horiz_factor, aspect_ratio_factor)
 
-        drop_severity = (
-            0.40 * max(posture_horiz_factor, aspect_ratio_factor) +
-            0.35 * drop_velocity_factor +
-            0.25 * (1.0 if a_y > 1.5 else 0.0)
-        )
-        drop_severity = float(np.clip(drop_severity, 0.0, 1.0))
+        # Dynamic evidence: peak downward velocity or aspect ratio collapse during the window
+        drop_motion_factor = float(np.clip(peak_v_y / 1.5, 0.0, 1.0))
+        transition_factor = float(np.clip(aspect_ratio_change / 0.8, 0.0, 1.0))
+        dynamic_drop_evidence = max(drop_motion_factor, transition_factor)
+
+        if dynamic_drop_evidence < 0.15 or is_horizontal < 0.30:
+            # Person is resting/sleeping without any drop motion, or still upright
+            drop_severity = 0.0
+        else:
+            drop_severity = float(np.clip(
+                0.40 * is_horizontal +
+                0.35 * dynamic_drop_evidence +
+                0.25 * (1.0 if peak_a_y > 1.0 else 0.0),
+                0.0, 1.0
+            ))
 
         return KinematicFeatures(
-            vertical_velocity=float(v_y),
-            vertical_acceleration=float(a_y),
+            vertical_velocity=float(peak_v_y),
+            vertical_acceleration=float(peak_a_y),
             aspect_ratio_curr=float(aspect_ratio_curr),
             aspect_ratio_change=float(aspect_ratio_change),
             torso_angle_curr=float(torso_angle_curr),

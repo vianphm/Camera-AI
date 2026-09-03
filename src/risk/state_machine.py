@@ -48,6 +48,13 @@ class EventStateMachine:
             if self.state == MonitorState.NORMAL:
                 return MonitorState.NORMAL, False
 
+            # If person was only in SUSPICIOUS, immediately drop back to NORMAL without recovery wait
+            if self.state == MonitorState.SUSPICIOUS:
+                self.state = MonitorState.NORMAL
+                self.state_entry_time = timestamp
+                self.normal_recovery_time = 0.0
+                return self.state, True
+
             if self.normal_recovery_time == 0.0:
                 self.normal_recovery_time = timestamp
             elif (timestamp - self.normal_recovery_time) >= self.thresholds.min_recovery_duration:
@@ -57,7 +64,7 @@ class EventStateMachine:
                 self.normal_recovery_time = 0.0
                 return self.state, True
 
-            # In the process of recovering, maintain current state
+            # In the process of recovering from ABNORMAL / HIGH_RISK, maintain current state
             return self.state, False
         else:
             self.normal_recovery_time = 0.0

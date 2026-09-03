@@ -29,12 +29,12 @@ def test_state_machine_escalation_requires_duration():
 def test_state_machine_recovery_on_getting_up():
     tm = ThresholdManager()
     sm = EventStateMachine(tm, initial_time=0.0)
-    sm.state = MonitorState.SUSPICIOUS
+    sm.state = MonitorState.ABNORMAL
     sm.state_entry_time = 0.0
 
-    # Person stands up and risk drops to 0.1 at t=1.0s
+    # Person starts getting up; risk drops to 0.1 at t=1.0s (in recovery phase, holds state)
     state, changed = sm.update(risk_score=0.10, action="getting_up", timestamp=1.0)
-    assert state == MonitorState.SUSPICIOUS
+    assert state == MonitorState.ABNORMAL
 
     # Continues standing normally for > min_recovery_duration (3.0s) -> t=4.5s
     state, changed = sm.update(risk_score=0.05, action="standing", timestamp=4.5)
