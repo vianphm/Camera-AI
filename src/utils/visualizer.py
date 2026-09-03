@@ -92,8 +92,12 @@ class PipelineVisualizer:
         color = self.get_state_color(state)
         x1, y1, x2, y2 = [int(v) for v in bbox]
 
-        # Draw bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+        # Draw bounding box (Thick glowing red border when emergency/fall detected)
+        is_emergency = (state in ["HIGH_RISK", "ALERT_SENT"]) or (risk_score >= 0.7)
+        thickness = 4 if is_emergency else 2
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+        if is_emergency:
+            cv2.rectangle(frame, (max(0, x1 - 3), max(0, y1 - 3)), (min(frame.shape[1] - 1, x2 + 3), min(frame.shape[0] - 1, y2 + 3)), (0, 0, 255), 2, cv2.LINE_AA)
 
         # Draw top label badge
         label = f"ID:{track_id} | {action.upper()} | {state}"
@@ -206,4 +210,11 @@ class PipelineVisualizer:
                 cv2.LINE_AA,
             )
 
+        return frame
+
+    def draw_emergency_frame_border(self, frame: np.ndarray) -> np.ndarray:
+        """Draw an emergency flashing red border around the entire camera frame."""
+        h, w = frame.shape[:2]
+        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), (0, 0, 240), 6, cv2.LINE_AA)
+        cv2.rectangle(frame, (8, 8), (w - 9, h - 9), (0, 0, 255), 2, cv2.LINE_AA)
         return frame

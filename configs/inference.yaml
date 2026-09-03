@@ -3,10 +3,16 @@
 runtime:
   device: "cuda" # cuda or cpu
   use_fp16: true
+  engine_type: "auto" # auto (TensorRT -> ONNX -> PyTorch), tensorrt, onnx, openvino, or pytorch
   batch_size: 1
   num_workers: 2
-  target_fps: 15
+  target_fps: 30
   sync_mode: false
+
+scheduling:
+  pose_stride: 2            # Run YOLO-Pose every 2 frames (10-15 FPS). Intermediate frames use Translation Offset
+  action_stride: 2          # Run temporal AI every 2 frames (when Gated Trigger is OPEN)
+  enable_gated_ai: true     # Bypass AI on normal walking/standing/sitting
 
 display:
   show_ui: true

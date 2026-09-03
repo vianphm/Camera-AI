@@ -194,8 +194,33 @@ class ByteTrackManager(Tracker):
                 matched_tracks_2[unmatched_track_ids[t_idx]] = dets_low[d_idx]
             remaining_unmatched_tracks = [unmatched_track_ids[i] for i in u_tracks_2]
 
+        # 4.5. Third Association (Fall Protection): Center-proximity matching for collapsing bodies
+        matched_tracks_3: Dict[int, Detection] = {}
+        if remaining_unmatched_tracks and unmatched_dets_high:
+            for tid in list(remaining_unmatched_tracks):
+                p_box = self._trackers[tid].get_state()
+                p_cx = (p_box[0] + p_box[2]) / 2.0
+                p_cy = (p_box[1] + p_box[3]) / 2.0
+                max_dim = max(p_box[2] - p_box[0], p_box[3] - p_box[1])
+
+                best_idx = -1
+                min_dist = float("inf")
+                for j, d in enumerate(unmatched_dets_high):
+                    d_cx = (d.bbox[0] + d.bbox[2]) / 2.0
+                    d_cy = (d.bbox[1] + d.bbox[3]) / 2.0
+                    dist = np.hypot(p_cx - d_cx, p_cy - d_cy)
+                    if dist < min_dist:
+                        min_dist = dist
+                        best_idx = j
+
+                # Relaxed matching distance during vertical-to-horizontal collapse (up to 1.6x height)
+                if best_idx >= 0 and min_dist <= (max_dim * 1.6):
+                    matched_tracks_3[tid] = unmatched_dets_high[best_idx]
+                    remaining_unmatched_tracks.remove(tid)
+                    unmatched_dets_high.pop(best_idx)
+
         # 5. Update matched trackers
-        all_matches = {**matched_tracks_1, **matched_tracks_2}
+        all_matches = {**matched_tracks_1, **matched_tracks_2, **matched_tracks_3}
         for tid, det in all_matches.items():
             self._trackers[tid].update(det.bbox)
             if tid not in self._tracks:

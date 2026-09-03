@@ -188,9 +188,12 @@ def main() -> None:
     parser.add_argument("--rtsp-url", type=str, default=None, help="RTSP Stream URL")
     parser.add_argument("--video-path", type=str, default=None, help="Đường dẫn tệp video MP4/AVI")
     parser.add_argument("--blur-faces", action="store_true", default=False, help="Bật làm mờ khuôn mặt (mặc định TẮT để theo dõi rõ nét)")
-    parser.add_argument("--no-gui", action="store_true", help="Chạy ở chế độ headless không hiển thị cửa sổ OpenCV")
+    parser.add_argument("--gui", action="store_true", default=False, help="Mở thêm cửa sổ desktop OpenCV (mặc định TẮT, ưu tiên hiển thị trên Web Dashboard http://localhost:8000)")
+    parser.add_argument("--no-gui", action="store_true", help="Chạy chế độ headless không hiển thị cửa sổ OpenCV")
     parser.add_argument("--no-server", action="store_true", help="Không khởi động FastAPI web server")
     parser.add_argument("--api-port", type=int, default=8000, help="Port cho FastAPI server")
+    parser.add_argument("--fast", action="store_true", default=False, help="Chế độ siêu nhanh Nano yolov8n-pose @ 480px")
+    parser.add_argument("--sequential", action="store_true", help="Chạy chế độ tuần tự đơn luồng cũ thay vì Decoupled 60 FPS")
     args = parser.parse_args()
 
     print_banner()
@@ -205,13 +208,46 @@ def main() -> None:
     if not args.no_server:
         start_background_web_server(port=args.api_port)
 
-    # BƯỚC 4: Khởi tạo Pipeline AI
-    pipeline = initialize_ai_pipeline(blur_faces=args.blur_faces)
+    # BƯỚC 4: Khởi tạo Pipeline AI (Decoupled High-FPS hoặc Tuần tự)
+    decoupled_pipe = None
+    if not args.sequential:
+        print("[4/5] Khởi tạo DECOUPLED PIPELINE (Tách rời Render Thread 60 FPS & AI Worker)...")
+        model_name = "yolov8n-pose.pt" if args.fast else configs["model"].get("pose", {}).get("model_name", "yolov8n-pose.pt")
+        img_size = 480 if args.fast else configs["model"].get("pose", {}).get("img_size", 640)
+        print(f"  • Single-Pass Model: {model_name} ({img_size}px) — IoU Matching (>=0.70)")
+        print("  • Cascade AI Gate  : Kinematic Trigger + Ground Proximity + Hold-on 45 frames")
+        print("  • Skip Compensation: Translation Offset (Khử trôi lệch xương)")
+        print("  • Keypoint Filter  : One Euro Filter (Khử 100% rung lắc)")
+        print("  • Render Target    : 30 - 60 FPS mượt mà (Non-blocking display)")
 
-    # Cấu hình hiển thị
+        from src.pipeline.decoupled_pipeline import DecoupledPipeline
+        decoupled_pipe = DecoupledPipeline(
+            model_name=model_name,
+            img_size=img_size,
+            device=configs["inference"].get("runtime", {}).get("device", "cuda"),
+            half=configs["inference"].get("runtime", {}).get("use_fp16", True),
+            ai_stride=2,
+        )
+        decoupled_pipe.start()
+        pipeline = decoupled_pipe
+    else:
+        pipeline = initialize_ai_pipeline(blur_faces=args.blur_faces)
+
+    # Đồng bộ Alert Dispatcher và Pipeline với Web Dashboard Server
+    if not args.no_server:
+        try:
+            import src.api.server as srv
+            pipeline.alert_manager.dispatcher.subscribe_websocket(srv.broadcast_alert_event)
+            with srv.state_lock:
+                srv.pipeline_instance = pipeline
+        except Exception as e:
+            print(f"[Warning] Không thể đồng bộ WebSocket dispatcher: {e}")
+
+
+    # Cấu hình hiển thị (Mặc định Web-First: tắt cửa sổ desktop OpenCV trừ khi truyền --gui)
     display_cfg = configs["inference"].get("display", {})
     window_name = display_cfg.get("window_name", "Elderly AI Monitor - Live HUD Stream")
-    show_gui = not args.no_gui
+    show_gui = args.gui and not args.no_gui
 
     # BƯỚC 5: Xử lý chạy đơn camera hoặc đa camera (Multi-Camera Scalability)
     if args.source == "multi":
@@ -261,8 +297,21 @@ def main() -> None:
         camera_cfg=configs["camera"],
     )
 
-    print("\n[5/5] Hệ thống đang hoạt động và giám sát liên tục (Latency thấp, Zero-lag buffer).")
-    print("      Nhấn phím [q] hoặc [ESC] trên cửa sổ hình ảnh để dừng lại.\n")
+    if not args.no_server:
+        try:
+            import src.api.server as srv
+            with srv.state_lock:
+                srv.camera_stream = stream
+                srv.is_running = True
+        except Exception:
+            pass
+
+    print("\n[5/5] Hệ thống đang hoạt động và giám sát liên tục (CHẾ ĐỘ WEB DASHBOARD).")
+    print(f"      Truy cập màn hình theo dõi & điều khiển trực tiếp tại: http://localhost:{args.api_port}")
+    if show_gui:
+        print("      Cửa sổ desktop OpenCV đang mở. Nhấn [q] hoặc [ESC] để dừng.")
+    else:
+        print("      Đang chạy chế độ Web-First mượt mà. Nhấn [Ctrl+C] trong terminal để dừng.")
     print("-" * 80)
 
     try:
@@ -272,14 +321,34 @@ def main() -> None:
                 time.sleep(0.002)
                 continue
 
-            # Thực thi toàn bộ chuỗi AI Inference đầu cuối
-            result: PipelineFrameResult = pipeline.process_frame(
-                frame=packet.frame,
-                timestamp=packet.timestamp,
-            )
+            if decoupled_pipe is not None:
+                # 1. Đẩy frame sang luồng AI Worker phi đồng bộ
+                decoupled_pipe.submit_frame(packet)
+
+                # 2. Render ngay lập tức trên luồng hiển thị (2ms latency -> 60+ FPS)
+                annotated_frame, alerts = decoupled_pipe.render_frame(packet.frame, packet.timestamp)
+            else:
+                # Chế độ tuần tự cũ
+                result: PipelineFrameResult = pipeline.process_frame(
+                    frame=packet.frame,
+                    timestamp=packet.timestamp,
+                )
+                annotated_frame = result.annotated_frame
+                alerts = result.alerts
+
+            # Cập nhật MJPEG Web Stream cho Browser Dashboard
+            if not args.no_server:
+                ret, jpeg = cv2.imencode(".jpg", annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                if ret:
+                    try:
+                        import src.api.server as srv
+                        with srv.state_lock:
+                            srv.latest_annotated_frame = jpeg.tobytes()
+                    except Exception:
+                        pass
 
             # Xử lý cảnh báo
-            for alert in result.alerts:
+            for alert in alerts:
                 print(f"\n[CẢNH BÁO KHẨN CẤP ĐƯỢC PHÁT HIỆN]")
                 print(f"  • Đối tượng ID   : {alert.person_id}")
                 print(f"  • Điểm rủi ro    : {alert.risk_score:.2f}")
@@ -292,7 +361,7 @@ def main() -> None:
 
             # Hiển thị giao diện đồ họa OpenCV trực tiếp (Mặt không bị làm mờ)
             if show_gui:
-                cv2.imshow(window_name, result.annotated_frame)
+                cv2.imshow(window_name, annotated_frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27 or key == ord("q"):
                     print("\n[Info] Nhận tín hiệu dừng từ bàn phím. Đang tắt hệ thống an toàn...")
@@ -301,7 +370,16 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n[Info] Nhận tín hiệu KeyboardInterrupt (Ctrl+C). Đang tắt hệ thống...")
     finally:
+        if decoupled_pipe is not None:
+            decoupled_pipe.stop()
         stream.release()
+        if not args.no_server:
+            try:
+                import src.api.server as srv
+                with srv.state_lock:
+                    srv.is_running = False
+            except Exception:
+                pass
         if show_gui:
             cv2.destroyAllWindows()
         print("[Success] Hệ thống đã dừng thành công. Tạm biệt!\n")

@@ -9,14 +9,16 @@ from src.detection.person_detector import YOLOv8PersonDetector
 from src.detection.detector_factory import create_detector
 from src.tracking.tracker import Tracker, Track
 from src.tracking.track_manager import ByteTrackManager
-from src.pose.pose_estimator import PoseEstimator, PoseResult, YOLOv8PoseEstimator
+from src.pose.pose_estimator import PoseEstimator, PoseResult, YOLOv8PoseEstimator, translate_keypoints
 from src.pose.pose_factory import create_pose_estimator
+from src.pose.keypoints import normalize_keypoints, compute_torso_angle
 from src.temporal.sequence_buffer import SequenceBuffer, TrackSnapshot
 from src.temporal.temporal_features import TemporalFeatureExtractor
+from src.temporal.gated_trigger import KinematicGatedTrigger
 from src.action.action_classifier import ActionClassifier
 from src.action.behavior_classifier import BehaviorSequenceAnalyzer
 from src.anomaly.anomaly_detector import AnomalyDetector
-from src.anomaly.anomaly_score import ReconstructionAnomalyScorer
+from src.anomaly.anomaly_score import ReconstructionAnomalyScorer, AnomalyResult
 from src.risk.risk_engine import RiskEngine, RiskAssessment
 from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
@@ -53,6 +55,7 @@ class RealtimePipeline:
         alert_manager: Optional[AlertManager] = None,
         visualizer: Optional[PipelineVisualizer] = None,
         blur_faces: bool = False,
+        single_pass: bool = True,
     ) -> None:
         # Load configs
         try:
@@ -73,17 +76,21 @@ class RealtimePipeline:
         self.use_fp16 = infer_cfg.get("runtime", {}).get("use_fp16", True) and (dev != "cpu")
         # Real-time stream: no face blurring
         self.blur_faces = infer_cfg.get("privacy", {}).get("blur_faces", False) and blur_faces
+        self.single_pass = single_pass and (detector is None)
 
-        # 1. Detection (Config-driven Pluggable Architecture)
-        det_cfg = model_cfg.get("detector", {})
-        det_arch = det_cfg.get("architecture", "yolov8")
-        self.detector = detector or create_detector(
-            architecture=det_arch,
-            model_path=det_cfg.get("model_name", "yolov8s.pt"),
-            conf_threshold=det_cfg.get("conf_threshold", 0.40),
-            device=self.device,
-            half=self.use_fp16,
-        )
+        # 1. Detection (Only instantiated when 2-pass mode is explicitly requested)
+        if not self.single_pass:
+            det_cfg = model_cfg.get("detector", {})
+            det_arch = det_cfg.get("architecture", "yolov8")
+            self.detector = detector or create_detector(
+                architecture=det_arch,
+                model_path=det_cfg.get("model_name", "yolov8n.pt"),
+                conf_threshold=det_cfg.get("conf_threshold", 0.40),
+                device=self.device,
+                half=self.use_fp16,
+            )
+        else:
+            self.detector = None
 
         # 2. Tracking (ByteTrack)
         trk_cfg = model_cfg.get("tracker", {})
@@ -94,12 +101,12 @@ class RealtimePipeline:
             match_thresh=trk_cfg.get("match_thresh", 0.70),
         )
 
-        # 3. Pose (Config-driven Pluggable Architecture)
+        # 3. Pose (Single-pass / Pluggable Architecture)
         pose_cfg = model_cfg.get("pose", {})
         pose_arch = pose_cfg.get("architecture", "yolov8_pose")
         self.pose_estimator = pose_estimator or create_pose_estimator(
             architecture=pose_arch,
-            model_path=pose_cfg.get("model_name", "yolov8s-pose.pt"),
+            model_path=pose_cfg.get("model_name", "yolov8n-pose.pt"),
             conf_threshold=pose_cfg.get("conf_threshold", 0.35),
             device=self.device,
             half=self.use_fp16,
@@ -115,6 +122,7 @@ class RealtimePipeline:
         self.action_classifier = action_classifier or ActionClassifier(
             weights_path=temp_cfg.get("weights_path", None),
             device=self.device,
+            architecture=temp_cfg.get("architecture", "tcn"),
         )
         self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(
             weights_path=model_cfg.get("anomaly", {}).get("weights_path", None),
@@ -125,6 +133,12 @@ class RealtimePipeline:
         # 6. Risk Engine & State Machine
         self.thresholds = ThresholdManager()
         self.risk_engine = risk_engine or RiskEngine(self.thresholds)
+
+        # 6.5. Tier 1 Kinematic Gated Trigger
+        self.gated_trigger = KinematicGatedTrigger(hold_on_frames=45)
+        self.iou_match_thresh = 0.70
+        self._prev_raw_keypoints: Dict[int, np.ndarray] = {}
+        self._prev_track_bboxes: Dict[int, Tuple[float, float, float, float]] = {}
 
         # 7. Alert Manager
         self.alert_manager = alert_manager or AlertManager(self.thresholds)
@@ -143,26 +157,85 @@ class RealtimePipeline:
         self._frame_count += 1
         annotated_frame = frame.copy()
 
-        # STAGE 1: Person Detection
-        self.profiler.start("detection")
-        detections = self.detector.detect(frame)
-        self.profiler.stop("detection")
+        poses: List[PoseResult] = []
 
-        # STAGE 2: Multi-Object Tracking
-        self.profiler.start("tracking")
-        active_tracks = self.tracker.update(detections, timestamp)
-        active_track_ids = {t.track_id for t in active_tracks}
-        self.sequence_buffer.update_activity(active_track_ids)
-        self.risk_engine.cleanup_inactive(active_track_ids)
-        self.profiler.stop("tracking")
+        if self.single_pass and hasattr(self.pose_estimator, "detect_and_estimate_single_pass"):
+            # STAGE 1 & 3: Single-Pass Perception (YOLO-Pose extracts both BBoxes & Keypoints)
+            self.profiler.start("perception")
+            detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(frame)
+            self.profiler.stop("perception")
 
-        # STAGE 3: Human Pose Estimation
-        self.profiler.start("pose")
-        poses = self.pose_estimator.estimate(frame, active_tracks)
-        pose_dict = {p.track_id: p for p in poses}
-        self.profiler.stop("pose")
+            # STAGE 2: Multi-Object Tracking
+            self.profiler.start("tracking")
+            active_tracks = self.tracker.update(detections, timestamp)
+            active_track_ids = {t.track_id for t in active_tracks}
+            self.sequence_buffer.update_activity(active_track_ids)
+            self.risk_engine.cleanup_inactive(active_track_ids)
+            self.gated_trigger.cleanup_inactive(active_track_ids)
+            self.profiler.stop("tracking")
 
-        # STAGE 4 & 5: Temporal Sequence Buffer & AI Reasoning
+            # Match keypoints with IoU >= 0.70
+            self.profiler.start("pose")
+            matched_kp_map = self.pose_estimator.match_tracks_to_keypoints(
+                active_tracks,
+                single_pass_items,
+                iou_threshold=self.iou_match_thresh,
+            )
+
+            for track in active_tracks:
+                tid = track.track_id
+                curr_bbox = track.bbox
+
+                if tid in matched_kp_map:
+                    raw_kp = matched_kp_map[tid]
+                elif tid in self._prev_raw_keypoints and tid in self._prev_track_bboxes:
+                    raw_kp = translate_keypoints(
+                        self._prev_raw_keypoints[tid],
+                        self._prev_track_bboxes[tid],
+                        curr_bbox,
+                    )
+                else:
+                    raw_kp = None
+
+                if raw_kp is not None:
+                    self._prev_raw_keypoints[tid] = raw_kp.copy()
+                    self._prev_track_bboxes[tid] = curr_bbox
+
+                    norm_kp = normalize_keypoints(raw_kp, bbox_fallback=track.bbox)
+                    torso_angle = compute_torso_angle(raw_kp)
+                    mean_conf = float(np.mean(raw_kp[:, 2]))
+                    poses.append(
+                        PoseResult(
+                            track_id=tid,
+                            keypoints=raw_kp,
+                            normalized_keypoints=norm_kp,
+                            torso_angle=torso_angle,
+                            confidence=mean_conf,
+                        )
+                    )
+            pose_dict = {p.track_id: p for p in poses}
+            self.profiler.stop("pose")
+
+        else:
+            # Legacy 2-Pass Mode Fallback
+            self.profiler.start("detection")
+            detections = self.detector.detect(frame) if self.detector else []
+            self.profiler.stop("detection")
+
+            self.profiler.start("tracking")
+            active_tracks = self.tracker.update(detections, timestamp)
+            active_track_ids = {t.track_id for t in active_tracks}
+            self.sequence_buffer.update_activity(active_track_ids)
+            self.risk_engine.cleanup_inactive(active_track_ids)
+            self.gated_trigger.cleanup_inactive(active_track_ids)
+            self.profiler.stop("tracking")
+
+            self.profiler.start("pose")
+            poses = self.pose_estimator.estimate(frame, active_tracks)
+            pose_dict = {p.track_id: p for p in poses}
+            self.profiler.stop("pose")
+
+        # STAGE 4 & 5: Temporal Sequence Buffer & Cascade / Gated AI Reasoning
         self.profiler.start("temporal_reasoning")
         assessments: List[RiskAssessment] = []
         alerts_raised: List[AlertEvent] = []
@@ -185,16 +258,31 @@ class RealtimePipeline:
             # Retrieve temporal sequence
             seq = self.sequence_buffer.get_normalized_sequence(tid)
             if seq is not None and self.sequence_buffer.is_ready(tid):
-                # Supervised Action Classification
-                action_pred = self.action_classifier.predict(seq)
-                self.behavior_analyzer.update(tid, action_pred.primary_action, timestamp)
-
-                # Unsupervised Anomaly Scoring
-                anomaly_res = self.anomaly_detector.score(seq)
-
-                # Kinematic Feature Extraction
                 snapshots_hist = self.sequence_buffer.get_snapshots(tid)
                 kinematics = self.feature_extractor.extract(snapshots_hist)
+
+                # Previous state for hysteresis
+                prev_ass = self.risk_engine.assessments.get(tid)
+                curr_state = prev_ass.state if prev_ass else "NORMAL"
+
+                # Tier 1 Kinematic Trigger evaluation
+                gate_res = self.gated_trigger.evaluate(
+                    track_id=tid,
+                    snapshots=snapshots_hist,
+                    kinematics=kinematics,
+                    current_state=curr_state,
+                )
+
+                if gate_res.should_run_ai:
+                    # Tier 2: Deep AI inference (Supervised Action + Unsupervised Anomaly)
+                    action_pred = self.action_classifier.predict(seq)
+                    anomaly_res = self.anomaly_detector.score(seq)
+                else:
+                    # Gate CLOSED: Heuristic fast path (~0 ms)
+                    action_pred = gate_res.heuristic_prediction
+                    anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
+
+                self.behavior_analyzer.update(tid, action_pred.primary_action, timestamp)
 
                 # Multi-Signal Risk Assessment
                 assessment = self.risk_engine.assess(

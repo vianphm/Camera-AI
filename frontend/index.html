@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elderly AI Monitor — Real-time Video Intelligence Dashboard</title>
+  <meta name="description" content="Hệ thống giám sát camera và phát hiện hành vi bất thường thời gian thực cho người cao tuổi">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-radar">
+        <span class="radar-circle"></span>
+        <span class="radar-scanner"></span>
+      </div>
+      <div class="brand-title">
+        <h1>ELDERLY AI MONITOR</h1>
+        <span class="brand-subtitle">Real-time Video Intelligence & Safety Surveillance</span>
+      </div>
+    </div>
+
+    <!-- Status badges -->
+    <div class="header-status">
+      <div class="status-badge" id="backend-status-badge">
+        <span class="badge-dot dot-offline" id="backend-status-dot"></span>
+        <span class="badge-text" id="backend-status-text">Đang kết nối API...</span>
+      </div>
+
+      <div class="status-badge" id="ws-status-badge">
+        <span class="badge-dot dot-offline" id="ws-status-dot"></span>
+        <span class="badge-text" id="ws-status-text">WebSocket: Offline</span>
+      </div>
+
+      <div class="digital-clock" id="digital-clock">00:00:00</div>
+    </div>
+  </header>
+
+  <!-- Clinical Safety Notice Banner -->
+  <div class="safety-banner" id="safety-banner">
+    <span class="safety-icon">⚠️</span>
+    <span class="safety-text">
+      <strong>LƯU Ý AN TOÀN Y TẾ:</strong> Hệ thống là công cụ hỗ trợ giám sát an toàn, <strong>KHÔNG</strong> đưa ra chẩn đoán y khoa tự động. Mọi cảnh báo phát ra dưới dạng: <em>"Possible medical emergency / abnormal behavior detected. Please check the person."</em>
+    </span>
+  </div>
+
+  <!-- Emergency Flash Banner (Hidden by default, pulses red on alert) -->
+  <div class="emergency-alert-bar" id="emergency-alert-bar" style="display: none;">
+    <div class="alert-bar-content">
+      <div class="alert-bar-icon">🚨</div>
+      <div class="alert-bar-msg">
+        <h3 id="alert-bar-title">PHÁT HIỆN HÀNH VI BẤT THƯỜNG / KHẨN CẤP!</h3>
+        <p id="alert-bar-desc">Possible medical emergency / abnormal behavior detected. Please check the person.</p>
+      </div>
+      <div class="alert-bar-action">
+        <button id="btn-dismiss-alert" class="btn-dismiss">ĐÃ XÁC NHẬN (DISMISS)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="dashboard-main">
+    <!-- Row 1: KPI Telemetry Cards -->
+    <section class="kpi-grid">
+      <!-- KPI 1: Pipeline FPS -->
+      <div class="kpi-card" id="kpi-fps-card">
+        <div class="kpi-header">
+          <span class="kpi-label">TỐC ĐỘ XỬ LÝ (FPS)</span>
+          <span class="kpi-icon">⚡</span>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpi-fps">0.0</div>
+          <span class="kpi-unit">khung hình/giây</span>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-indicator ind-good" id="kpi-fps-ind">Latency thấp &bull; Zero-Lag Buffer</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Tracked Persons -->
+      <div class="kpi-card" id="kpi-tracks-card">
+        <div class="kpi-header">
+          <span class="kpi-label">SỐ NGƯỜI ĐANG THEO DÕI</span>
+          <span class="kpi-icon">👤</span>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpi-tracks">0</div>
+          <span class="kpi-unit">đối tượng (ByteTrack)</span>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-indicator ind-neutral" id="kpi-tracks-ind">Đang quan sát liên tục</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: Peak Risk Level -->
+      <div class="kpi-card" id="kpi-risk-card">
+        <div class="kpi-header">
+          <span class="kpi-label">MỨC ĐỘ NGUY CƠ CAO NHẤT</span>
+          <span class="kpi-icon">🛡️</span>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value risk-green" id="kpi-risk">0.00</div>
+          <span class="kpi-unit" id="kpi-risk-state">BÌNH THƯỜNG</span>
+        </div>
+        <div class="kpi-meter-bg">
+          <div class="kpi-meter-fill meter-green" id="kpi-risk-meter" style="width: 5%;"></div>
+        </div>
+      </div>
+
+      <!-- KPI 4: Hardware Telemetry -->
+      <div class="kpi-card" id="kpi-hw-card">
+        <div class="kpi-header">
+          <span class="kpi-label">TÀI NGUYÊN HỆ THỐNG</span>
+          <span class="kpi-icon">💻</span>
+        </div>
+        <div class="kpi-body kpi-telemetry">
+          <div class="telem-row">
+            <span>CPU:</span>
+            <strong id="telem-cpu">0.0%</strong>
+          </div>
+          <div class="telem-row">
+            <span>RAM:</span>
+            <strong id="telem-ram">0.0 GB</strong>
+          </div>
+          <div class="telem-row">
+            <span>GPU:</span>
+            <strong id="telem-gpu">NVIDIA RTX 3050</strong>
+          </div>
+        </div>
+        <div class="kpi-footer">
+          <span class="kpi-indicator ind-good" id="telem-status">Ổn định &bull; Zero Memory Leak</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Row 2: 2-Column Main Workspace -->
+    <section class="workspace-grid">
+      <!-- Left Column: Video Feed & Camera Controls -->
+      <div class="workspace-col col-video">
+        <div class="card video-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-dot dot-live"></span>
+              <h2>CAMERA MONITORING STREAM</h2>
+              <span class="stream-pill" id="stream-pill">DIRECT MJPEG FEED</span>
+            </div>
+            <div class="card-actions">
+              <button class="btn-icon" id="btn-fullscreen" title="Toàn màn hình">⛶</button>
+              <button class="btn-icon" id="btn-snapshot" title="Chụp ảnh snapshot">📷</button>
+            </div>
+          </div>
+
+          <!-- Video Display Area -->
+          <div class="video-container" id="video-container">
+            <img 
+              id="live-video-stream" 
+              src="/stream/mjpeg" 
+              alt="Live AI Video Stream" 
+              onerror="this.onerror=null; this.src=''; window.handleStreamError();"
+            >
+            <!-- Floating Fall Warning Banner on Video -->
+            <div class="video-fall-badge" id="video-fall-badge" style="display: none;">
+              <span class="badge-icon">🚨</span>
+              <span id="video-fall-text">CẢNH BÁO: PHÁT HIỆN NGƯỜI VẤP TÉ!</span>
+            </div>
+
+            <!-- Overlay Placeholder if stream inactive -->
+            <div class="stream-offline-overlay" id="stream-offline-overlay">
+              <div class="offline-box">
+                <div class="offline-icon">📹</div>
+                <h3>LUỒNG VIDEO CHƯA KHỞI ĐỘNG</h3>
+                <p>Khởi chạy hệ thống bằng lệnh <code>python main.py</code> hoặc nhấn nút bật camera bên dưới.</p>
+                <button class="btn-primary" id="btn-start-camera-overlay">BẬT CAMERA STREAM</button>
+              </div>
+            </div>
+
+            <!-- HUD Badges on Top of Video -->
+            <div class="video-hud">
+              <div class="hud-item" id="hud-cam-name">CAM 01: WEBCAM</div>
+              <div class="hud-item" id="hud-res">1280x720</div>
+              <div class="hud-item hud-unblurred" id="hud-blur-status">MẶT: RÕ NÉT (KHÔNG LÀM MỜ)</div>
+            </div>
+          </div>
+
+          <!-- Camera Stream Controls -->
+          <div class="camera-controls">
+            <div class="ctrl-group">
+              <label for="camera-source-select">Nguồn Video:</label>
+              <select id="camera-source-select" class="form-select">
+                <option value="webcam">Webcam thiết bị (Device 0)</option>
+                <option value="rtsp">Camera IP (RTSP Stream)</option>
+                <option value="video">Tệp Video mẫu (File MP4)</option>
+              </select>
+            </div>
+
+            <div class="ctrl-group rtsp-input-group" id="rtsp-input-group" style="display: none;">
+              <input type="text" id="rtsp-url-input" class="form-input" placeholder="rtsp://admin:pass@192.168.1.100:554/stream">
+            </div>
+
+            <div class="ctrl-buttons">
+              <button class="btn-primary" id="btn-camera-toggle">BẬT CAMERA STREAM</button>
+              <button class="btn-secondary" id="btn-camera-reset">RESET CAMERA</button>
+              <button class="btn-secondary" id="btn-refresh-stream">TẢI LẠI STREAM</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Temporal Analytics & Live Alert Log -->
+      <div class="workspace-col col-analytics">
+        <!-- Live Person Diagnostics Card -->
+        <div class="card person-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">📊</span>
+              <h2>THEO DÕI ĐỘNG HỌC & TƯ THẾ</h2>
+            </div>
+            <span class="refresh-indicator" id="person-refresh-time">Cập nhật: Real-time</span>
+          </div>
+
+          <div class="card-body" id="person-diagnostics-body">
+            <div class="person-table-container">
+              <table class="person-table" id="person-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>HÀNH ĐỘNG</th>
+                    <th>GÓC NGHIÊNG</th>
+                    <th>TỶ LỆ W/H</th>
+                    <th>VẬN TỐC Vy</th>
+                    <th>RỦI RO</th>
+                    <th>TRẠNG THÁI</th>
+                  </tr>
+                </thead>
+                <tbody id="person-table-body">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">Đang quét tìm đối tượng trong phòng...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emergency Alert Feed Card -->
+        <div class="card alerts-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">🔔</span>
+              <h2>NHẬT KÝ CẢNH BÁO THỜI GIAN THỰC</h2>
+              <span class="alerts-counter" id="alerts-count-badge">0 sự kiện</span>
+            </div>
+            <div class="card-actions">
+              <button class="btn-chime-test" id="btn-test-chime" title="Bấm để phát thử tiếng chuông cảnh báo ra loa">🔔 Test Chuông</button>
+              <button class="btn-danger-outline" id="btn-clear-alerts">🗑️ Xóa các lần cảnh báo</button>
+              <button class="btn-text" id="btn-sound-toggle">Âm thanh: BẬT 🔊</button>
+            </div>
+          </div>
+
+          <!-- Alert Feed List -->
+          <div class="alerts-feed" id="alerts-feed">
+            <div class="empty-alerts" id="empty-alerts-placeholder">
+              <span class="empty-icon">🛡️</span>
+              <p>Chưa có sự cố bất thường nào được ghi nhận.</p>
+              <span class="empty-hint">Hệ thống đang quan sát liên tục 24/7</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Sound effect for alerts -->
+  <audio id="alert-sound" preload="auto">
+    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLI7c8s2GLAczk9vywYAsBDCS3PLCgCwEMpLc8sGALAQyktzywYAsBDOS3PLBgCwEM5Lc8sGALAQzktzywYAsBDOS3PLBgCwEM5Lc8sGALAQ=" type="audio/wav">
+  </audio>
+
+  <script src="app.js"></script>
+</body>
+</html>

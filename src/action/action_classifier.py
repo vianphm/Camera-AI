@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
-from src.temporal.temporal_model import SpatialTemporalTransformer
+from src.temporal.temporal_model import SpatialTemporalTransformer, TCNSequenceClassifier
 
 ACTION_CLASSES: List[str] = [
     "walking",            # 0
@@ -52,10 +52,17 @@ class ActionClassifier:
         weights_path: Optional[Union[str, Path]] = None,
         device: str = "cuda",
         num_classes: int = 10,
+        architecture: str = "tcn",
     ) -> None:
         self.device = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
         self.num_classes = num_classes
-        self.model = SpatialTemporalTransformer(input_dim=51, num_classes=num_classes)
+        self.architecture = architecture.lower()
+
+        if self.architecture == "tcn":
+            self.model = TCNSequenceClassifier(input_dim=51, num_classes=num_classes)
+        else:
+            self.model = SpatialTemporalTransformer(input_dim=51, num_classes=num_classes)
+
         self.has_weights = False
 
         if weights_path and Path(weights_path).exists():

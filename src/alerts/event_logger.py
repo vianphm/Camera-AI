@@ -99,3 +99,12 @@ class EventLogger:
                     except json.JSONDecodeError:
                         continue
         return events[-limit:]
+
+    def clear_events(self) -> None:
+        """Clear all historical logged events and reset JSONL log."""
+        if self.jsonl_file.exists():
+            try:
+                self.jsonl_file.unlink()
+            except Exception:
+                with open(self.jsonl_file, "w", encoding="utf-8") as f:
+                    f.truncate(0)

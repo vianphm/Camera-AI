@@ -68,8 +68,14 @@ def system_status() -> Dict[str, Any]:
     """Retrieve operational state of camera and AI inference pipeline."""
     with state_lock:
         running = is_running
-        fps = pipeline_instance.profiler.fps if pipeline_instance else 0.0
-        tracks_count = len(pipeline_instance.tracker._tracks) if (pipeline_instance and hasattr(pipeline_instance.tracker, "_tracks")) else 0
+        prof = getattr(pipeline_instance, "render_profiler", getattr(pipeline_instance, "profiler", None))
+        fps = prof.fps if prof else 0.0
+        tracks_count = 0
+        if pipeline_instance:
+            if hasattr(pipeline_instance, "shared_state"):
+                tracks_count = len(pipeline_instance.shared_state.tracks)
+            elif hasattr(pipeline_instance, "tracker") and hasattr(pipeline_instance.tracker, "_tracks"):
+                tracks_count = len(pipeline_instance.tracker._tracks)
 
     return {
         "camera_active": running,
@@ -81,12 +87,25 @@ def system_status() -> Dict[str, Any]:
 
 @app.post("/camera/start")
 def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
-    """Start the video ingestion and AI inference pipeline."""
+    """Start or auto-reset the video ingestion and AI inference pipeline."""
     global camera_stream, pipeline_instance, is_running
 
     with state_lock:
+        # If already active, auto-reset to release previous hardware locks
         if is_running:
-            return {"status": "already_running", "message": "Camera pipeline is already active."}
+            is_running = False
+            if hasattr(pipeline_instance, "stop"):
+                try:
+                    pipeline_instance.stop()
+                except Exception:
+                    pass
+            if camera_stream:
+                try:
+                    camera_stream.release()
+                except Exception:
+                    pass
+                camera_stream = None
+            time.sleep(0.3)
 
         # Initialize Camera
         if req.source_type == "webcam":
@@ -103,10 +122,21 @@ def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail=f"Unsupported source_type: {req.source_type}")
 
         if not camera_stream.start():
-            raise HTTPException(status_code=500, detail="Failed to initialize camera capture stream.")
+            raise HTTPException(status_code=500, detail="Không thể kết nối Camera. Vui lòng kiểm tra quyền truy cập webcam.")
 
-        # Initialize Pipeline
-        pipeline_instance = RealtimePipeline()
+        # Initialize Decoupled Pipeline for ultra-smooth 60 FPS rendering
+        try:
+            from src.pipeline.decoupled_pipeline import DecoupledPipeline
+            pipeline_instance = DecoupledPipeline(
+                model_name="yolov8n-pose.pt",
+                img_size=480,
+                ai_stride=2,
+            )
+            pipeline_instance.start()
+        except Exception as e:
+            # Fallback to standard RealtimePipeline if needed
+            print(f"[Warning] DecoupledPipeline init error, falling back: {e}")
+            pipeline_instance = RealtimePipeline()
 
         # Connect alert dispatcher callback to broadcast over WebSocket
         def on_alert_dispatched(event: AlertEvent):
@@ -117,19 +147,30 @@ def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
         is_running = True
         threading.Thread(target=_pipeline_worker_loop, daemon=True, name="PipelineWorker").start()
 
-    return {"status": "started", "source": req.source_type}
+    return {"status": "started", "source": req.source_type, "mode": "decoupled_60fps"}
+
+
+@app.post("/camera/reset")
+def reset_camera(req: Optional[CameraStartRequest] = None) -> Dict[str, Any]:
+    """Cleanly reset, release hardware lock, and restart camera pipeline."""
+    return start_camera(req or CameraStartRequest())
 
 
 @app.post("/camera/stop")
 def stop_camera() -> Dict[str, Any]:
-    """Stop the video pipeline."""
-    global camera_stream, is_running
+    """Stop the video pipeline and release camera resources."""
+    global camera_stream, pipeline_instance, is_running
 
     with state_lock:
         if not is_running:
             return {"status": "not_running", "message": "Pipeline is not running."}
 
         is_running = False
+        if hasattr(pipeline_instance, "stop"):
+            try:
+                pipeline_instance.stop()
+            except Exception:
+                pass
         if camera_stream:
             camera_stream.release()
             camera_stream = None
@@ -144,16 +185,22 @@ def _pipeline_worker_loop() -> None:
     while is_running and camera_stream and camera_stream.is_opened():
         packet = camera_stream.read(timeout=0.5)
         if packet is None or packet.frame is None:
-            time.sleep(0.01)
+            time.sleep(0.005)
             continue
 
-        result = pipeline_instance.process_frame(packet.frame, packet.timestamp)
+        if hasattr(pipeline_instance, "submit_frame"):
+            pipeline_instance.submit_frame(packet)
+            annotated_frame, _ = pipeline_instance.render_frame(packet.frame, packet.timestamp)
+        else:
+            result = pipeline_instance.process_frame(packet.frame, packet.timestamp)
+            annotated_frame = result.annotated_frame
 
         # Encode frame to JPEG for MJPEG browser stream
-        ret, jpeg = cv2.imencode(".jpg", result.annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        ret, jpeg = cv2.imencode(".jpg", annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if ret:
             with state_lock:
                 latest_annotated_frame = jpeg.tobytes()
+
 
 
 @app.get("/events")
@@ -170,27 +217,40 @@ def get_event(event_id: str) -> Dict[str, Any]:
         if evt.get("event_id") == event_id:
             return evt
     raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
-
+@app.post("/events/clear")
+@app.delete("/events")
+def clear_all_events() -> Dict[str, Any]:
+    """Clear all stored emergency alert events."""
+    event_logger.clear_events()
+    return {"status": "cleared", "message": "All alert events cleared."}
 
 def mjpeg_generator():
-    """Generator yielding multipart MJPEG video frames."""
-    while is_running:
+    """Generator yielding multipart MJPEG video frames with resilient keepalive."""
+    empty_wait = 0
+    while is_running or empty_wait < 50:
         with state_lock:
             frame_bytes = latest_annotated_frame
 
         if frame_bytes is not None:
+            empty_wait = 0
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
             )
-        time.sleep(0.04)  # ~25 FPS max for MJPEG web feed
+        else:
+            empty_wait += 1
+        time.sleep(0.02)  # Up to 50 FPS for smooth MJPEG web feed
 
 
 @app.get("/stream/mjpeg")
 def video_mjpeg_feed():
     """MJPEG Live Video Stream for HTML <img> embedding."""
+    global is_running
     if not is_running:
-        raise HTTPException(status_code=400, detail="Camera pipeline is not running. Start via POST /camera/start.")
+        try:
+            start_camera(CameraStartRequest())
+        except Exception as e:
+            print(f"[Warning] Auto-start camera in /stream/mjpeg failed: {e}")
     return StreamingResponse(mjpeg_generator(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
@@ -225,3 +285,30 @@ async def websocket_alerts_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if websocket in active_ws_clients:
             active_ws_clients.remove(websocket)
+
+
+# ==============================================================================
+# STATIC FRONTEND MOUNTING & SERVING
+# ==============================================================================
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+frontend_dir = get_project_root() / "frontend"
+if frontend_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
+
+    @app.get("/")
+    def serve_frontend_index():
+        """Serve dashboard HTML homepage."""
+        return FileResponse(str(frontend_dir / "index.html"))
+
+    @app.get("/styles.css")
+    def serve_frontend_css():
+        """Serve dashboard stylesheet."""
+        return FileResponse(str(frontend_dir / "styles.css"))
+
+    @app.get("/app.js")
+    def serve_frontend_js():
+        """Serve dashboard controller script."""
+        return FileResponse(str(frontend_dir / "app.js"))
+
