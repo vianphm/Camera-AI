@@ -42,8 +42,8 @@ gating:
   area_change_thresh: 0.32         # Z-axis collapse / contortion area change threshold
 
 temporal:
-  architecture: "tcn"              # tcn (lightweight high-speed, 3-5x faster) or st_transformer
-  weights_path: "models/action/best_tcn.pt"
+  architecture: "st_transformer"   # st_transformer (Spatial-Temporal Transformer) or tcn
+  weights_path: "models/checkpoints/best_st_transformer.pt"
   window_size: 30                  # 30 frames ~ 2.0s at 15 FPS
   stride: 2                        # Sliding window stride S_action = 2
   num_classes: 10
@@ -55,7 +55,7 @@ temporal:
 
 anomaly:
   architecture: "pose_autoencoder"
-  weights_path: "models/anomaly/best_pose_autoencoder.pt"
+  weights_path: "models/checkpoints/best_pose_autoencoder.pt"
   window_size: 30
   feature_dim: 51
   latent_dim: 64

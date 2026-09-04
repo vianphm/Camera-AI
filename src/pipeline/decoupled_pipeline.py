@@ -100,6 +100,8 @@ class DecoupledPipeline:
         half: bool = True,
         ai_stride: int = 2,  # AI processes every N camera frames (e.g. 15 FPS from 30 FPS camera)
         anomaly_interval: int = 5,  # Run heavy Autoencoder every 5 AI frames
+        action_classifier: Optional[ActionClassifier] = None,
+        anomaly_detector: Optional[ReconstructionAnomalyScorer] = None,
     ) -> None:
         self.ai_stride = ai_stride
         self.anomaly_interval = anomaly_interval
@@ -142,12 +144,13 @@ class DecoupledPipeline:
         self.sequence_buffer = SequenceBuffer(window_size=window_size)
         self.feature_extractor = TemporalFeatureExtractor(fps=15.0)
 
-        # 5. Dual-Stream AI Models (TCN & Periodic Autoencoder)
-        self.action_classifier = ActionClassifier(
+        # 5. Dual-Stream AI Models (ST-Transformer / TCN & Periodic Autoencoder)
+        self.action_classifier = action_classifier or ActionClassifier(
             weights_path=temp_cfg.get("weights_path", None),
             device=self.device,
+            architecture=temp_cfg.get("architecture", "tcn"),
         )
-        self.anomaly_detector = ReconstructionAnomalyScorer(
+        self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(
             weights_path=model_cfg.get("anomaly", {}).get("weights_path", None),
             device=self.device,
         )
