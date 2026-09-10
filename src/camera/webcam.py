@@ -28,14 +28,20 @@ class WebcamStream(CameraStream):
         self._cap: Optional[cv2.VideoCapture] = None
 
     def _open_capture(self) -> bool:
+        import sys
         backend = cv2.CAP_ANY
-        if self.api_preference.lower() == "dshow":
+        pref = self.api_preference.lower()
+        if pref == "dshow" or (pref == "default" and sys.platform == "win32"):
             backend = cv2.CAP_DSHOW
-        elif self.api_preference.lower() == "v4l2":
+        elif pref == "v4l2":
             backend = cv2.CAP_V4L2
 
         self._cap = cv2.VideoCapture(self.device_index, backend)
-        if not self._cap.isOpened():
+        # Fallback to ANY if DSHOW fails to open
+        if (not self._cap or not self._cap.isOpened()) and backend == cv2.CAP_DSHOW:
+            self._cap = cv2.VideoCapture(self.device_index, cv2.CAP_ANY)
+
+        if not self._cap or not self._cap.isOpened():
             return False
 
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.target_width)

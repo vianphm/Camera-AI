@@ -110,7 +110,9 @@ def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
 
         # Initialize Camera
         if req.source_type == "webcam":
-            camera_stream = WebcamStream(device_index=req.device_index)
+            cam_cfg = load_config("camera.yaml")
+            api_pref = cam_cfg.get("webcam", {}).get("api_preference", "dshow")
+            camera_stream = WebcamStream(device_index=req.device_index, api_preference=api_pref)
         elif req.source_type == "rtsp":
             if not req.rtsp_url:
                 raise HTTPException(status_code=400, detail="rtsp_url must be provided for rtsp source_type.")
@@ -123,7 +125,10 @@ def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail=f"Unsupported source_type: {req.source_type}")
 
         if not camera_stream.start():
-            raise HTTPException(status_code=500, detail="Không thể kết nối Camera. Vui lòng kiểm tra quyền truy cập webcam.")
+            print("[Notice] Cannot connect camera hardware. Falling back to SyntheticCameraStream.")
+            from src.camera.synthetic import SyntheticCameraStream
+            camera_stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+            camera_stream.start()
 
         # Initialize Decoupled Pipeline for ultra-smooth 60 FPS rendering
         try:

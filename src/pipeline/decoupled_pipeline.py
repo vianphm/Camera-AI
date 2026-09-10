@@ -119,13 +119,27 @@ class DecoupledPipeline:
 
         # 1. Single-Pass Pose & Detection Model
         pose_cfg = model_cfg.get("pose", {})
-        self.pose_estimator = YOLOv8PoseEstimator(
-            model_path=model_name,
-            conf_threshold=pose_cfg.get("conf_threshold", 0.35),
-            device=self.device,
-            half=self.half,
-            img_size=img_size,
-        )
+        arch = pose_cfg.get("architecture", "yolov8_pose")
+        model_str = str(model_name)
+        if model_str.endswith(".engine") or model_str.endswith(".onnx") or arch in ["rtmo_s", "rtmo_pose"]:
+            from src.pose.rtmo_estimator import RTMOPoseEstimator
+            actual_path = model_name
+            if not (model_str.endswith(".engine") or model_str.endswith(".onnx")):
+                actual_path = "models/pose/rtmo-s_int8.engine"
+            self.pose_estimator = RTMOPoseEstimator(
+                model_path=actual_path,
+                conf_threshold=pose_cfg.get("conf_threshold", 0.35),
+                device=self.device,
+                img_size=(img_size, img_size) if isinstance(img_size, int) else img_size,
+            )
+        else:
+            self.pose_estimator = YOLOv8PoseEstimator(
+                model_path=model_name,
+                conf_threshold=pose_cfg.get("conf_threshold", 0.35),
+                device=self.device,
+                half=self.half,
+                img_size=img_size,
+            )
 
         # 2. ByteTrack with Fall Protection
         trk_cfg = model_cfg.get("tracker", {})

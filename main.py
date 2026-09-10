@@ -118,7 +118,8 @@ def initialize_camera_stream(
         width = camera_cfg.get("webcam", {}).get("width", 1280)
         height = camera_cfg.get("webcam", {}).get("height", 720)
         fps = camera_cfg.get("webcam", {}).get("fps", 30)
-        stream = WebcamStream(device_index=w_idx, width=width, height=height, fps=fps)
+        api_pref = camera_cfg.get("webcam", {}).get("api_preference", "dshow")
+        stream = WebcamStream(device_index=w_idx, width=width, height=height, fps=fps, api_preference=api_pref)
 
     elif source_type == "rtsp":
         url = rtsp_url or camera_cfg.get("rtsp", {}).get("url")
@@ -129,18 +130,19 @@ def initialize_camera_stream(
     elif source_type == "video":
         vpath = video_path or camera_cfg.get("video", {}).get("path")
         if not vpath or not Path(vpath).exists():
-            # Tạo video kiểm thử tổng hợp nếu chưa có video file
             print(f"  [Notice] File video '{vpath}' không tìm thấy. Sử dụng webcam mặc định index 0.")
-            stream = WebcamStream(device_index=0)
+            api_pref = camera_cfg.get("webcam", {}).get("api_preference", "dshow")
+            stream = WebcamStream(device_index=0, api_preference=api_pref)
         else:
             stream = VideoFileStream(video_path=vpath, loop=True)
     else:
         raise ValueError(f"Nguồn camera không hợp lệ: {source_type}")
 
     if not stream.start():
-        print("  [Warning] Không thể mở camera trực tiếp. Khởi tạo video stream giả lập để kiểm thử.")
-        # Fallback tạo camera stream rỗng giả lập frame để pipeline vẫn chạy mượt mà
-        stream = WebcamStream(device_index=0)
+        print("  [Warning] Không thể mở camera trực tiếp. Khởi tạo SyntheticCameraStream giả lập để kiểm thử.")
+        from src.camera.synthetic import SyntheticCameraStream
+        stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+        stream.start()
 
     print(f"  • Video Ingestion Worker: [READY] (Target FPS: {stream.get_fps():.0f})")
     return stream

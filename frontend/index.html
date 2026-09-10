@@ -1,16 +1,21 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Elderly AI Monitor — Real-time Video Intelligence Dashboard</title>
-  <meta name="description" content="Hệ thống giám sát camera và phát hiện hành vi bất thường thời gian thực cho người cao tuổi">
+  <meta name="description"
+    content="Hệ thống giám sát camera và phát hiện hành vi bất thường thời gian thực cho người cao tuổi">
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <!-- Top Navigation Header -->
   <header class="app-header">
@@ -45,7 +50,9 @@
   <div class="safety-banner" id="safety-banner">
     <span class="safety-icon">⚠️</span>
     <span class="safety-text">
-      <strong>LƯU Ý AN TOÀN Y TẾ:</strong> Hệ thống là công cụ hỗ trợ giám sát an toàn, <strong>KHÔNG</strong> đưa ra chẩn đoán y khoa tự động. Mọi cảnh báo phát ra dưới dạng: <em>"Possible medical emergency / abnormal behavior detected. Please check the person."</em>
+      <strong>LƯU Ý AN TOÀN Y TẾ:</strong> Hệ thống là công cụ hỗ trợ giám sát an toàn, <strong>KHÔNG</strong> đưa ra
+      chẩn đoán y khoa tự động. Mọi cảnh báo phát ra dưới dạng: <em>"Possible medical emergency / abnormal behavior
+        detected. Please check the person."</em>
     </span>
   </div>
 
@@ -84,12 +91,8 @@
 
           <!-- Video Display Area -->
           <div class="video-container" id="video-container">
-            <img 
-              id="live-video-stream" 
-              src="/stream/mjpeg" 
-              alt="Live AI Video Stream" 
-              onerror="this.onerror=null; this.src=''; window.handleStreamError();"
-            >
+            <img id="live-video-stream" src="/stream/mjpeg" alt="Live AI Video Stream"
+              onerror="this.onerror=null; this.src=''; window.handleStreamError();">
             <!-- Floating Fall Warning Banner on Video -->
             <div class="video-fall-badge" id="video-fall-badge" style="display: none;">
               <span class="badge-icon">🚨</span>
@@ -126,7 +129,8 @@
             </div>
 
             <div class="ctrl-group rtsp-input-group" id="rtsp-input-group" style="display: none;">
-              <input type="text" id="rtsp-url-input" class="form-input" placeholder="rtsp://admin:pass@192.168.1.100:554/stream">
+              <input type="text" id="rtsp-url-input" class="form-input"
+                placeholder="rtsp://admin:pass@192.168.1.100:554/stream">
             </div>
 
             <div class="ctrl-buttons">
@@ -268,7 +272,8 @@
             </div>
             <div class="card-actions">
               <div class="header-menu-wrapper">
-                <button type="button" class="btn-chrome-more" id="btn-alerts-menu-toggle" title="Tùy chọn nhật ký cảnh báo" aria-label="Tùy chọn">
+                <button type="button" class="btn-chrome-more" id="btn-alerts-menu-toggle"
+                  title="Tùy chọn nhật ký cảnh báo" aria-label="Tùy chọn">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="12" cy="5" r="2.2"></circle>
                     <circle cx="12" cy="12" r="2.2"></circle>
@@ -302,7 +307,8 @@
                   <div class="chrome-menu-divider"></div>
 
                   <!-- Item 1: Phát thử chuông loa -->
-                  <button type="button" class="chrome-menu-item" id="btn-test-chime" title="Phát thử âm thanh chuông cảnh báo ra loa">
+                  <button type="button" class="chrome-menu-item" id="btn-test-chime"
+                    title="Phát thử âm thanh chuông cảnh báo ra loa">
                     <div class="item-left">
                       <span class="item-icon">🔔</span>
                       <span class="item-label">Phát thử chuông loa</span>
@@ -311,7 +317,8 @@
                   </button>
 
                   <!-- Item 2: Bật/Tắt Âm thanh cảnh báo -->
-                  <button type="button" class="chrome-menu-item" id="btn-sound-toggle" title="Bật/Tắt âm thanh báo động">
+                  <button type="button" class="chrome-menu-item" id="btn-sound-toggle"
+                    title="Bật/Tắt âm thanh báo động">
                     <div class="item-left">
                       <span class="item-icon" id="sound-icon-indicator">🔊</span>
                       <span class="item-label">Âm thanh cảnh báo</span>
@@ -322,7 +329,8 @@
                   <div class="chrome-menu-divider"></div>
 
                   <!-- Item 3: Xóa tạm thời -->
-                  <button type="button" class="chrome-menu-item" id="btn-clear-temp" title="Xóa tạm thời khỏi màn hình hiện tại (không xóa nhật ký lưu trữ)">
+                  <button type="button" class="chrome-menu-item" id="btn-clear-temp"
+                    title="Xóa tạm thời khỏi màn hình hiện tại (không xóa nhật ký lưu trữ)">
                     <div class="item-left">
                       <span class="item-icon">🧹</span>
                       <span class="item-label">Xóa tạm thời danh sách</span>
@@ -331,7 +339,8 @@
                   </button>
 
                   <!-- Item 4: Xóa vĩnh viễn (giống mục Delete browsing data... Ctrl+Shift+Del trong Chrome) -->
-                  <button type="button" class="chrome-menu-item item-danger" id="btn-clear-permanent" title="Xóa vĩnh viễn tất cả cảnh báo khỏi hệ thống máy chủ">
+                  <button type="button" class="chrome-menu-item item-danger" id="btn-clear-permanent"
+                    title="Xóa vĩnh viễn tất cả cảnh báo khỏi hệ thống máy chủ">
                     <div class="item-left">
                       <span class="item-icon">🗑️</span>
                       <span class="item-label">Xóa vĩnh viễn</span>
@@ -358,9 +367,12 @@
 
   <!-- Sound effect for alerts -->
   <audio id="alert-sound" preload="auto">
-    <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLI7c8s2GLAczk9vywYAsBDCS3PLCgCwEMpLc8sGALAQyktzywYAsBDOS3PLBgCwEM5Lc8sGALAQzktzywYAsBDOS3PLBgCwEM5Lc8sGALAQ=" type="audio/wav">
+    <source
+      src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLI7c8s2GLAczk9vywYAsBDCS3PLCgCwEMpLc8sGALAQyktzywYAsBDOS3PLBgCwEM5Lc8sGALAQzktzywYAsBDOS3PLBgCwEM5Lc8sGALAQ="
+      type="audio/wav">
   </audio>
 
   <script src="app.js"></script>
 </body>
+
 </html>
