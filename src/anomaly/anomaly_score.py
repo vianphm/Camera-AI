@@ -65,8 +65,9 @@ class PoseSequenceAutoencoder(nn.Module):
         if x.dim() == 4:
             b, t, k, c = x.shape
             x = x.view(b, t, k * c).transpose(1, 2)  # (B, 51, T)
-        elif x.dim() == 3 and x.shape[1] > x.shape[2]:
-            x = x.transpose(1, 2)  # (B, 51, T)
+        elif x.dim() == 3:
+            if x.shape[1] != self.input_dim and x.shape[2] == self.input_dim:
+                x = x.transpose(1, 2)  # (B, T, 51) -> (B, 51, T)
 
         target_len = x.shape[2]
 
@@ -81,6 +82,9 @@ class PoseSequenceAutoencoder(nn.Module):
         if len(orig_shape) == 4:
             # Reshape back to (B, T, 17, 3)
             reconstructed = reconstructed.transpose(1, 2).view(orig_shape)
+        elif len(orig_shape) == 3 and orig_shape[2] == self.input_dim:
+            # Reshape back to (B, T, 51)
+            reconstructed = reconstructed.transpose(1, 2)
 
         return reconstructed
 
@@ -117,10 +121,14 @@ class ReconstructionAnomalyScorer(AnomalyDetector):
         """Compute reconstruction error and map to [0, 1] anomaly score."""
         if self.has_weights:
             with torch.no_grad():
-                tensor_seq = torch.from_numpy(sequence).unsqueeze(0).to(self.device)
+                seq_tensor = torch.as_tensor(sequence, dtype=torch.float32, device=self.device)
+                if seq_tensor.dim() in (2, 3):
+                    tensor_seq = seq_tensor.unsqueeze(0)
+                else:
+                    tensor_seq = seq_tensor
                 reconstructed = self.model(tensor_seq)
                 rec_np = reconstructed.cpu().numpy()[0]
-                error = float(np.mean(np.abs(sequence[:, :, :2] - rec_np[:, :, :2])))
+                error = float(np.mean(np.abs(sequence - rec_np)))
         else:
             # Heuristic calculation based on extreme body deformation & sudden acceleration
             error = self._heuristic_anomaly_error(sequence)

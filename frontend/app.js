@@ -53,7 +53,8 @@
   const elEmptyPlaceholder = document.getElementById("empty-alerts-placeholder");
   const elAlertsCountBadge = document.getElementById("alerts-count-badge");
   const elBtnTestChime = document.getElementById("btn-test-chime");
-  const elBtnClearAlerts = document.getElementById("btn-clear-alerts");
+  const elBtnClearTemp = document.getElementById("btn-clear-temp");
+  const elBtnClearPermanent = document.getElementById("btn-clear-permanent");
   const elBtnSoundToggle = document.getElementById("btn-sound-toggle");
   const elBtnFullscreen = document.getElementById("btn-fullscreen");
   const elPersonTableBody = document.getElementById("person-table-body");
@@ -383,10 +384,13 @@
     }
 
     alertCount++;
-    elAlertsCountBadge.textContent = `${alertCount} sự kiện`;
+    elAlertsCountBadge.textContent = `${alertCount} sự kiện ›`;
 
     const card = document.createElement("div");
     card.className = "alert-item";
+
+    const eventId = alert.event_id || `evt_${Date.now()}_trk${alert.person_id}`;
+    card.dataset.eventId = eventId;
 
     const timestamp = alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
     const action = alert.evidence?.primary_action || "Khẩn cấp";
@@ -398,7 +402,17 @@
           <span>🚨</span>
           <span>Đối tượng #${alert.person_id} — ${action.toUpperCase()}</span>
         </div>
-        <span class="alert-item-time">${timestamp}</span>
+        <div class="alert-item-header-actions">
+          <span class="alert-item-time">${timestamp}</span>
+          <div class="alert-menu-wrapper">
+            <button type="button" class="btn-alert-menu" title="Tùy chọn cảnh báo" aria-label="Tùy chọn cảnh báo">⋮</button>
+            <div class="alert-menu-dropdown">
+              <button type="button" class="dropdown-item btn-delete-single-perm" title="Xóa vĩnh viễn cảnh báo này">
+                <span>🗑️</span> Xóa vĩnh viễn
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="alert-item-msg">
         ${alert.message || "Possible medical emergency / abnormal behavior detected. Please check the person."}
@@ -410,6 +424,40 @@
         <span class="meta-field">Bất động: <strong>${alert.evidence?.immobility_index ?? "N/A"}</strong></span>
       </div>
     `;
+
+    // 3-Dots dropdown and individual permanent delete listener
+    const btnMenu = card.querySelector(".btn-alert-menu");
+    const dropdownMenu = card.querySelector(".alert-menu-dropdown");
+    const btnDelete = card.querySelector(".btn-delete-single-perm");
+
+    if (btnMenu && dropdownMenu) {
+      btnMenu.addEventListener("click", (evt) => {
+        evt.stopPropagation();
+        // Close other open dropdowns
+        document.querySelectorAll(".alert-menu-dropdown.show").forEach((el) => {
+          if (el !== dropdownMenu) el.classList.remove("show");
+        });
+        document.querySelectorAll(".btn-alert-menu.active").forEach((el) => {
+          if (el !== btnMenu) el.classList.remove("active");
+        });
+
+        dropdownMenu.classList.toggle("show");
+        btnMenu.classList.toggle("active");
+      });
+    }
+
+    if (btnDelete) {
+      btnDelete.addEventListener("click", async (evt) => {
+        evt.stopPropagation();
+        dropdownMenu.classList.remove("show");
+        btnMenu.classList.remove("active");
+
+        const ok = window.confirm(`Bạn có chắc muốn xóa vĩnh viễn cảnh báo này khỏi hệ thống không?`);
+        if (!ok) return;
+
+        await deleteSingleAlertPermanently(eventId, card);
+      });
+    }
 
     if (isNew) {
       elAlertsFeed.insertBefore(card, elAlertsFeed.firstChild);
@@ -469,9 +517,9 @@
       const data = await res.json();
 
       if (data.telemetry) {
-        elTelemCpu.textContent = `${data.telemetry.cpu_percent ?? 0}%`;
-        elTelemRam.textContent = `${data.telemetry.ram_used_gb ?? 0} GB`;
-        elTelemGpu.textContent = data.telemetry.gpu_available ? "CUDA (RTX 3050)" : "CPU Runtime";
+        if (elTelemCpu) elTelemCpu.textContent = `${data.telemetry.cpu_percent ?? 0}%`;
+        if (elTelemRam) elTelemRam.textContent = `${data.telemetry.ram_used_gb ?? 0} GB`;
+        if (elTelemGpu) elTelemGpu.textContent = data.telemetry.gpu_available ? "CUDA (RTX 3050)" : "CPU Runtime";
       }
     } catch (_) {}
   }
@@ -632,28 +680,134 @@
     updateRiskKpi(0.05, "BÌNH THƯỜNG");
   });
 
-  // Clear Alerts (Xóa các lần cảnh báo & tắt chuông)
-  async function clearAllAlerts() {
-    // 1. Reset frontend feed
+  // Xóa đơn lẻ vĩnh viễn 1 cảnh báo
+  async function deleteSingleAlertPermanently(eventId, cardElement) {
+    if (eventId) {
+      try {
+        await fetch(`${API_BASE}/events/${encodeURIComponent(eventId)}`, { method: "DELETE" });
+      } catch (err) {
+        console.warn("[Dashboard] Lỗi kết nối khi xóa sự kiện trên server:", err);
+      }
+    }
+
+    if (cardElement) {
+      cardElement.style.transition = "all 0.25s ease-out";
+      cardElement.style.opacity = "0";
+      cardElement.style.transform = "translateX(25px)";
+      setTimeout(() => {
+        if (cardElement.parentNode) {
+          cardElement.parentNode.removeChild(cardElement);
+        }
+      }, 250);
+    }
+
+    alertCount = Math.max(0, alertCount - 1);
+    elAlertsCountBadge.textContent = alertCount > 0 ? `${alertCount} sự kiện ›` : "0 sự kiện ›";
+
+    if (alertCount === 0) {
+      if (elEmptyPlaceholder) {
+        elEmptyPlaceholder.style.display = "flex";
+      }
+      stopContinuousAlarm();
+      clearEmergencyVisuals();
+      if (elEmergencyBar) elEmergencyBar.style.display = "none";
+      updateRiskKpi(0.05, "BÌNH THƯỜNG");
+    }
+  }
+
+  // Chức năng 1: Xóa tạm thời (Ẩn khỏi màn hình hiện tại & tắt chuông, không xóa dữ liệu máy chủ)
+  function clearTempAlerts() {
     elAlertsFeed.innerHTML = "";
     elAlertsFeed.appendChild(elEmptyPlaceholder);
     elEmptyPlaceholder.style.display = "flex";
     alertCount = 0;
-    elAlertsCountBadge.textContent = "0 sự kiện";
+    elAlertsCountBadge.textContent = "0 sự kiện ›";
 
-    // 2. Tắt chuông báo động và xóa khung viền đỏ cảnh báo
     stopContinuousAlarm();
     clearEmergencyVisuals();
-    elEmergencyBar.style.display = "none";
+    if (elEmergencyBar) elEmergencyBar.style.display = "none";
     updateRiskKpi(0.05, "BÌNH THƯỜNG");
 
-    // 3. Xóa lịch sử lưu trữ trên Backend API
-    try {
-      await fetch(`${API_BASE}/events/clear`, { method: "POST" });
-    } catch (_) {}
+    console.log("[Dashboard] Danh sách cảnh báo đã được xóa tạm thời khỏi màn hình.");
   }
 
-  elBtnClearAlerts.addEventListener("click", clearAllAlerts);
+  // Chức năng 2: Xóa vĩnh viễn (Xóa toàn bộ trên giao diện và xóa vĩnh viễn dữ liệu trên Backend API)
+  async function clearPermanentAlerts() {
+    const confirmClear = window.confirm(
+      "CẢNH BÁO XÓA VĨNH VIỄN:\nToàn bộ dữ liệu lịch sử cảnh báo sẽ bị xóa sạch khỏi hệ thống máy chủ và không thể khôi phục.\nBạn có chắc chắn muốn xóa không?"
+    );
+    if (!confirmClear) return;
+
+    elAlertsFeed.innerHTML = "";
+    elAlertsFeed.appendChild(elEmptyPlaceholder);
+    elEmptyPlaceholder.style.display = "flex";
+    alertCount = 0;
+    elAlertsCountBadge.textContent = "0 sự kiện ›";
+
+    stopContinuousAlarm();
+    clearEmergencyVisuals();
+    if (elEmergencyBar) elEmergencyBar.style.display = "none";
+    updateRiskKpi(0.05, "BÌNH THƯỜNG");
+
+    try {
+      await fetch(`${API_BASE}/events/clear`, { method: "POST" });
+      console.log("[Dashboard] Toàn bộ dữ liệu cảnh báo đã được xóa vĩnh viễn trên Server.");
+    } catch (err) {
+      console.warn("[Dashboard] Lỗi khi gửi yêu cầu xóa vĩnh viễn lên server:", err);
+    }
+  }
+
+  if (elBtnClearTemp) {
+    elBtnClearTemp.addEventListener("click", () => {
+      clearTempAlerts();
+      if (elAlertsMenuDropdown) elAlertsMenuDropdown.classList.remove("show");
+      if (elBtnAlertsMenuToggle) elBtnAlertsMenuToggle.classList.remove("active");
+    });
+  }
+  if (elBtnClearPermanent) {
+    elBtnClearPermanent.addEventListener("click", async () => {
+      await clearPermanentAlerts();
+      if (elAlertsMenuDropdown) elAlertsMenuDropdown.classList.remove("show");
+      if (elBtnAlertsMenuToggle) elBtnAlertsMenuToggle.classList.remove("active");
+    });
+  }
+
+  // Header 3-Dots Dropdown Menu for Alerts Card
+  const elBtnAlertsMenuToggle = document.getElementById("btn-alerts-menu-toggle");
+  const elAlertsMenuDropdown = document.getElementById("alerts-menu-dropdown");
+
+  if (elBtnAlertsMenuToggle && elAlertsMenuDropdown) {
+    elBtnAlertsMenuToggle.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      // Close other item dropdowns
+      document.querySelectorAll(".alert-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
+      document.querySelectorAll(".btn-alert-menu.active").forEach((el) => el.classList.remove("active"));
+
+      elAlertsMenuDropdown.classList.toggle("show");
+      elBtnAlertsMenuToggle.classList.toggle("active");
+    });
+  }
+
+  // Đóng toàn bộ dropdown 3 chấm khi click ra ngoài
+  document.addEventListener("click", () => {
+    document.querySelectorAll(".alert-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
+    document.querySelectorAll(".chrome-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
+    document.querySelectorAll(".btn-alert-menu.active").forEach((el) => el.classList.remove("active"));
+    document.querySelectorAll(".btn-chrome-more.active").forEach((el) => el.classList.remove("active"));
+  });
+
+  const elSoundIconIndicator = document.getElementById("sound-icon-indicator");
+  const elSoundBadgeStatus = document.getElementById("sound-badge-status");
+
+  function updateSoundUi() {
+    if (elSoundIconIndicator) {
+      elSoundIconIndicator.textContent = soundEnabled ? "🔊" : "🔇";
+    }
+    if (elSoundBadgeStatus) {
+      elSoundBadgeStatus.textContent = soundEnabled ? "BẬT" : "TẮT";
+      elSoundBadgeStatus.className = soundEnabled ? "item-badge-status status-on" : "item-badge-status status-off";
+    }
+  }
 
   // Nút Test Chuông Cảnh Báo
   if (elBtnTestChime) {
@@ -661,7 +815,7 @@
       initAudioContext();
       if (!soundEnabled) {
         soundEnabled = true;
-        elBtnSoundToggle.textContent = "Âm thanh: BẬT 🔊";
+        updateSoundUi();
       }
       console.log("[Dashboard] Testing emergency alarm chime over speaker...");
       triggerAlarmChime("fall");
@@ -669,16 +823,18 @@
   }
 
   // Sound Toggle
-  elBtnSoundToggle.addEventListener("click", () => {
-    soundEnabled = !soundEnabled;
-    if (!soundEnabled) {
-      stopContinuousAlarm();
-    } else {
-      initAudioContext();
-      playBellChimeTone(880, 0.35, 0.4); // Tiếng chuông nhẹ xác nhận đã bật loa
-    }
-    elBtnSoundToggle.textContent = soundEnabled ? "Âm thanh: BẬT 🔊" : "Âm thanh: TẮT 🔇";
-  });
+  if (elBtnSoundToggle) {
+    elBtnSoundToggle.addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled) {
+        stopContinuousAlarm();
+      } else {
+        initAudioContext();
+        playBellChimeTone(880, 0.35, 0.4); // Tiếng chuông nhẹ xác nhận đã bật loa
+      }
+      updateSoundUi();
+    });
+  }
 
   // Fullscreen toggle
   elBtnFullscreen.addEventListener("click", () => {

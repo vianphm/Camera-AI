@@ -168,7 +168,7 @@ class PipelineVisualizer:
     ) -> np.ndarray:
         """Draw heads-up display (FPS, active people, status)."""
         h, w = frame.shape[:2]
-        hud_w, hud_h = 240, 80
+        hud_w, hud_h = 260, 95
         hud_x, hud_y = w - hud_w - 10, 10
 
         overlay = frame.copy()
@@ -178,10 +178,10 @@ class PipelineVisualizer:
 
         cv2.putText(
             frame,
-            f"FPS: {fps:.1f} | Status: {system_status}",
-            (hud_x + 10, hud_y + 24),
+            f"FPS: {fps:.1f} | Status: {system_status[:16]}",
+            (hud_x + 10, hud_y + 22),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
+            0.42,
             (0, 255, 120),
             1,
             cv2.LINE_AA,
@@ -189,22 +189,47 @@ class PipelineVisualizer:
         cv2.putText(
             frame,
             f"Monitored Persons: {active_tracks}",
-            (hud_x + 10, hud_y + 48),
+            (hud_x + 10, hud_y + 44),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.45,
+            0.42,
             COLOR_WHITE,
             1,
             cv2.LINE_AA,
         )
+
+        # Tier-0 Motion Gating indicator
+        if telemetry and "tier0_status" in telemetry:
+            t0_status = telemetry["tier0_status"]
+            t0_ratio = telemetry.get("tier0_motion_ratio", 0.0) * 100.0
+            if t0_status == "IDLE":
+                t0_str = f"Tier-0: IDLE (AI OFF, 10-15 FPS)"
+                t0_color = (255, 200, 0)  # Cyan/Sky
+            elif t0_status == "COOLDOWN":
+                t0_str = f"Tier-0: COOLDOWN ({t0_ratio:.1f}%)"
+                t0_color = (0, 200, 255)  # Orange
+            else:
+                t0_str = f"Tier-0: ACTIVE ({t0_ratio:.1f}%)"
+                t0_color = (0, 255, 120)  # Green
+
+            cv2.putText(
+                frame,
+                t0_str,
+                (hud_x + 10, hud_y + 66),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.40,
+                t0_color,
+                1,
+                cv2.LINE_AA,
+            )
 
         if telemetry and "gpu_vram_allocated_mb" in telemetry:
             vram_mb = telemetry["gpu_vram_allocated_mb"]
             cv2.putText(
                 frame,
                 f"GPU VRAM: {vram_mb:.0f} MB",
-                (hud_x + 10, hud_y + 68),
+                (hud_x + 10, hud_y + 86),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.40,
+                0.38,
                 (200, 200, 200),
                 1,
                 cv2.LINE_AA,

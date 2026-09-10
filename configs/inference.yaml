@@ -10,9 +10,11 @@ runtime:
   sync_mode: false
 
 scheduling:
+  enable_tier0_motion_gating: true # Tier-0 Motion Gating (Bypass AI & throttle to 10-15 FPS when room is static)
   pose_stride: 2            # Run YOLO-Pose every 2 frames (10-15 FPS). Intermediate frames use Translation Offset
   action_stride: 2          # Run temporal AI every 2 frames (when Gated Trigger is OPEN)
   enable_gated_ai: true     # Bypass AI on normal walking/standing/sitting
+
 
 display:
   show_ui: true

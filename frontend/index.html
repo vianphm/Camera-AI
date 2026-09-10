@@ -65,80 +65,7 @@
 
   <!-- Main Container -->
   <main class="dashboard-main">
-    <!-- Row 1: KPI Telemetry Cards -->
-    <section class="kpi-grid">
-      <!-- KPI 1: Pipeline FPS -->
-      <div class="kpi-card" id="kpi-fps-card">
-        <div class="kpi-header">
-          <span class="kpi-label">TỐC ĐỘ XỬ LÝ (FPS)</span>
-          <span class="kpi-icon">⚡</span>
-        </div>
-        <div class="kpi-body">
-          <div class="kpi-value" id="kpi-fps">0.0</div>
-          <span class="kpi-unit">khung hình/giây</span>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-indicator ind-good" id="kpi-fps-ind">Latency thấp &bull; Zero-Lag Buffer</span>
-        </div>
-      </div>
-
-      <!-- KPI 2: Tracked Persons -->
-      <div class="kpi-card" id="kpi-tracks-card">
-        <div class="kpi-header">
-          <span class="kpi-label">SỐ NGƯỜI ĐANG THEO DÕI</span>
-          <span class="kpi-icon">👤</span>
-        </div>
-        <div class="kpi-body">
-          <div class="kpi-value" id="kpi-tracks">0</div>
-          <span class="kpi-unit">đối tượng (ByteTrack)</span>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-indicator ind-neutral" id="kpi-tracks-ind">Đang quan sát liên tục</span>
-        </div>
-      </div>
-
-      <!-- KPI 3: Peak Risk Level -->
-      <div class="kpi-card" id="kpi-risk-card">
-        <div class="kpi-header">
-          <span class="kpi-label">MỨC ĐỘ NGUY CƠ CAO NHẤT</span>
-          <span class="kpi-icon">🛡️</span>
-        </div>
-        <div class="kpi-body">
-          <div class="kpi-value risk-green" id="kpi-risk">0.00</div>
-          <span class="kpi-unit" id="kpi-risk-state">BÌNH THƯỜNG</span>
-        </div>
-        <div class="kpi-meter-bg">
-          <div class="kpi-meter-fill meter-green" id="kpi-risk-meter" style="width: 5%;"></div>
-        </div>
-      </div>
-
-      <!-- KPI 4: Hardware Telemetry -->
-      <div class="kpi-card" id="kpi-hw-card">
-        <div class="kpi-header">
-          <span class="kpi-label">TÀI NGUYÊN HỆ THỐNG</span>
-          <span class="kpi-icon">💻</span>
-        </div>
-        <div class="kpi-body kpi-telemetry">
-          <div class="telem-row">
-            <span>CPU:</span>
-            <strong id="telem-cpu">0.0%</strong>
-          </div>
-          <div class="telem-row">
-            <span>RAM:</span>
-            <strong id="telem-ram">0.0 GB</strong>
-          </div>
-          <div class="telem-row">
-            <span>GPU:</span>
-            <strong id="telem-gpu">NVIDIA RTX 3050</strong>
-          </div>
-        </div>
-        <div class="kpi-footer">
-          <span class="kpi-indicator ind-good" id="telem-status">Ổn định &bull; Zero Memory Leak</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Row 2: 2-Column Main Workspace -->
+    <!-- Main 2-Column Workspace -->
     <section class="workspace-grid">
       <!-- Left Column: Video Feed & Camera Controls -->
       <div class="workspace-col col-video">
@@ -213,6 +140,91 @@
 
       <!-- Right Column: Temporal Analytics & Live Alert Log -->
       <div class="workspace-col col-analytics">
+        <!-- Compact KPI & Telemetry Metrics Card -->
+        <div class="card metrics-card" id="metrics-card">
+          <div class="card-header">
+            <div class="card-title">
+              <span class="card-icon">⚡</span>
+              <h2>CHỈ SỐ HỆ THỐNG & HIỆU NĂNG</h2>
+            </div>
+            <span class="refresh-indicator">Cập nhật: Real-time</span>
+          </div>
+
+          <div class="card-body" style="padding: 0;">
+            <div class="metrics-table-container">
+              <table class="metrics-table" id="metrics-table">
+                <thead>
+                  <tr>
+                    <th style="width: 33%;">THÔNG SỐ GIÁM SÁT</th>
+                    <th style="width: 32%;">GIÁ TRỊ HIỆN TẠI</th>
+                    <th style="width: 35%;">TRẠNG THÁI & CHỈ BÁO</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 1. Tốc độ xử lý (FPS) -->
+                  <tr>
+                    <td>
+                      <div class="tbl-metric-name">
+                        <span class="tbl-metric-icon">⚡</span>
+                        <span>Tốc độ xử lý (FPS)</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tbl-val-wrap">
+                        <span class="kpi-value" id="kpi-fps">0.0</span>
+                        <span class="tbl-val-unit">khung hình/giây</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="kpi-indicator ind-good" id="kpi-fps-ind">Latency thấp &bull; Zero-Lag Buffer</span>
+                    </td>
+                  </tr>
+
+                  <!-- 2. Số người đang theo dõi -->
+                  <tr>
+                    <td>
+                      <div class="tbl-metric-name">
+                        <span class="tbl-metric-icon">👤</span>
+                        <span>Số người đang theo dõi</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tbl-val-wrap">
+                        <span class="kpi-value" id="kpi-tracks">0</span>
+                        <span class="tbl-val-unit">đối tượng (ByteTrack)</span>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="kpi-indicator ind-neutral" id="kpi-tracks-ind">Đang quan sát liên tục 24/7</span>
+                    </td>
+                  </tr>
+
+                  <!-- 3. Mức độ nguy cơ cao nhất -->
+                  <tr>
+                    <td>
+                      <div class="tbl-metric-name">
+                        <span class="tbl-metric-icon">🛡️</span>
+                        <span>Mức độ nguy cơ cao nhất</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="tbl-val-wrap">
+                        <span class="kpi-value risk-green" id="kpi-risk">0.00</span>
+                        <span class="tbl-risk-badge" id="kpi-risk-state">BÌNH THƯỜNG</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="kpi-meter-bg" style="margin-top: 0; max-width: 170px;">
+                        <div class="kpi-meter-fill meter-green" id="kpi-risk-meter" style="width: 5%;"></div>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <!-- Live Person Diagnostics Card -->
         <div class="card person-card">
           <div class="card-header">
@@ -253,12 +265,81 @@
             <div class="card-title">
               <span class="card-icon">🔔</span>
               <h2>NHẬT KÝ CẢNH BÁO THỜI GIAN THỰC</h2>
-              <span class="alerts-counter" id="alerts-count-badge">0 sự kiện</span>
             </div>
             <div class="card-actions">
-              <button class="btn-chime-test" id="btn-test-chime" title="Bấm để phát thử tiếng chuông cảnh báo ra loa">🔔 Test Chuông</button>
-              <button class="btn-danger-outline" id="btn-clear-alerts">🗑️ Xóa các lần cảnh báo</button>
-              <button class="btn-text" id="btn-sound-toggle">Âm thanh: BẬT 🔊</button>
+              <div class="header-menu-wrapper">
+                <button type="button" class="btn-chrome-more" id="btn-alerts-menu-toggle" title="Tùy chọn nhật ký cảnh báo" aria-label="Tùy chọn">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="5" r="2.2"></circle>
+                    <circle cx="12" cy="12" r="2.2"></circle>
+                    <circle cx="12" cy="19" r="2.2"></circle>
+                  </svg>
+                </button>
+                <div class="chrome-menu-dropdown" id="alerts-menu-dropdown">
+                  <!-- Header Status Section (giống mục thông báo quyền / an toàn trên cùng của Chrome) -->
+                  <div class="chrome-menu-header-notice">
+                    <div class="notice-left">
+                      <span class="notice-icon">🛡️</span>
+                      <span class="notice-text">Giám sát an toàn 24/7</span>
+                    </div>
+                    <span class="notice-badge">Hoạt động</span>
+                  </div>
+
+                  <div class="chrome-menu-divider"></div>
+
+                  <!-- Profile Status Card (theo chuẩn khung người dùng Cường - Signed in > trong mẫu Chrome) -->
+                  <div class="chrome-menu-profile">
+                    <div class="profile-left">
+                      <div class="profile-avatar">C</div>
+                      <div class="profile-text">
+                        <span class="profile-title">Cường</span>
+                        <span class="profile-sub">Quản trị viên hệ thống</span>
+                      </div>
+                    </div>
+                    <span class="chrome-signed-pill" id="alerts-count-badge">0 sự kiện ›</span>
+                  </div>
+
+                  <div class="chrome-menu-divider"></div>
+
+                  <!-- Item 1: Phát thử chuông loa -->
+                  <button type="button" class="chrome-menu-item" id="btn-test-chime" title="Phát thử âm thanh chuông cảnh báo ra loa">
+                    <div class="item-left">
+                      <span class="item-icon">🔔</span>
+                      <span class="item-label">Phát thử chuông loa</span>
+                    </div>
+                    <span class="item-right">Ctrl+T</span>
+                  </button>
+
+                  <!-- Item 2: Bật/Tắt Âm thanh cảnh báo -->
+                  <button type="button" class="chrome-menu-item" id="btn-sound-toggle" title="Bật/Tắt âm thanh báo động">
+                    <div class="item-left">
+                      <span class="item-icon" id="sound-icon-indicator">🔊</span>
+                      <span class="item-label">Âm thanh cảnh báo</span>
+                    </div>
+                    <span class="item-badge-status status-on" id="sound-badge-status">BẬT</span>
+                  </button>
+
+                  <div class="chrome-menu-divider"></div>
+
+                  <!-- Item 3: Xóa tạm thời -->
+                  <button type="button" class="chrome-menu-item" id="btn-clear-temp" title="Xóa tạm thời khỏi màn hình hiện tại (không xóa nhật ký lưu trữ)">
+                    <div class="item-left">
+                      <span class="item-icon">🧹</span>
+                      <span class="item-label">Xóa tạm thời danh sách</span>
+                    </div>
+                    <span class="item-right">Ẩn ›</span>
+                  </button>
+
+                  <!-- Item 4: Xóa vĩnh viễn (giống mục Delete browsing data... Ctrl+Shift+Del trong Chrome) -->
+                  <button type="button" class="chrome-menu-item item-danger" id="btn-clear-permanent" title="Xóa vĩnh viễn tất cả cảnh báo khỏi hệ thống máy chủ">
+                    <div class="item-left">
+                      <span class="item-icon">🗑️</span>
+                      <span class="item-label">Xóa vĩnh viễn</span>
+                    </div>
+                    <span class="item-right">Ctrl+Shift+Del</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 

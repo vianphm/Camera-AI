@@ -225,6 +225,14 @@ def clear_all_events() -> Dict[str, Any]:
     event_logger.clear_events()
     return {"status": "cleared", "message": "All alert events cleared."}
 
+
+@app.delete("/events/{event_id}")
+@app.post("/events/{event_id}/delete")
+def delete_single_event(event_id: str) -> Dict[str, Any]:
+    """Permanently delete a specific alert event by its ID."""
+    deleted = event_logger.delete_event(event_id)
+    return {"status": "success", "deleted": deleted, "event_id": event_id}
+
 def mjpeg_generator():
     """Generator yielding multipart MJPEG video frames with resilient keepalive."""
     empty_wait = 0

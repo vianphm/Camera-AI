@@ -1,3 +1,4 @@
+
 """Pose estimation interface and YOLOv8-Pose implementation."""
 
 from abc import ABC, abstractmethod
@@ -98,7 +99,7 @@ class YOLOv8PoseEstimator(PoseEstimator):
 
     def __init__(
         self,
-        model_path: Union[str, Path] = "yolov8s-pose.pt",
+        model_path: Union[str, Path] = "yolov8n-pose.pt",
         conf_threshold: float = 0.35,
         device: str = "cuda",
         half: bool = True,

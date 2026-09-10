@@ -66,7 +66,22 @@ flowchart TD
   * `RTSPStream`: Hỗ trợ kết nối RTSP từ camera an ninh Hikvision, Dahua, Imou, TP-Link Tapo kèm cơ chế tự động kết nối lại (Auto-reconnect with exponential backoff).
   * `VideoStream`: Xử lý video file MP4, AVI phục vụ offline benchmark và evaluation.
 
+### 2.1.1. Tier-0 Motion Gating (`src/detection/motion_gater.py`)
+* **Mục tiêu**: Tiết kiệm tối đa năng lượng và nhiệt độ GPU khi căn phòng tĩnh lặng (không có người hoặc người rời khỏi phòng).
+* **Thuật toán trừ nền**:
+  * Hỗ trợ kép: **MOG2** (`cv2.createBackgroundSubtractorMOG2`) và **Frame Differencing** siêu nhẹ.
+  * Xử lý trên frame thu nhỏ (320x240), thời gian thực thi cực thấp (< 0.3 ms trên CPU).
+* **Cơ chế Zero GPU Inference**:
+  * Khi phòng tĩnh lặng (`motion_ratio < min_motion_ratio`): **Tắt 100% suy luận AI** (RTMO-s, YOLOv8, ST-GCN, Autoencoder đều bị bypass), GPU tiêu thụ = 0%.
+  * Giảm FPS xử lý xuống mức tiết kiệm **10–15 FPS** (`idle_stride = 2`).
+* **Cơ chế đánh thức tức thì & Chống mù (Anti-Blindness Safeguards)**:
+  * **Instant Wake-up**: Khi phát hiện chuyển động người bước vào, lập tức bật lại AI ở tốc độ tối đa **30 FPS**.
+  * **Cooldown Debouncing (45 frames ~ 3.0s)**: Duy trì mở cổng suy luận khi người tạm đứng yên hoặc di chuyển chậm.
+  * **Active Track Override**: Nếu camera vẫn đang theo dõi đối tượng trong phòng, cổng luôn giữ mở hoặc giám sát liên tục.
+  * **Periodic Keep-alive**: Tự động đánh thức suy luận 1 frame sau mỗi 45 frames tĩnh lặng để rà soát phòng ngừa người ngất lịm bất động.
+
 ### 2.2. Detection & Multi-Object Tracking (`src/detection/`, `src/tracking/`)
+
 * **`PersonDetector` Interface**:
   * Model cốt lõi: YOLOv8n/s hoặc YOLOv11n (được lọc chỉ lấy class `0: person`).
   * Trả về danh sách đối tượng `Detection(bbox=[x1, y1, x2, y2], confidence, class_id=0)`.
@@ -86,9 +101,10 @@ flowchart TD
         ground_plane_y: float            # Ước lượng mặt sàn cục bộ
     ```
 
-### 2.3. Human Pose Estimation (`src/pose/`)
-* **`PoseEstimator` Interface**:
-  * Model: **YOLOv8-Pose** (hoặc RTMPose). Trích xuất 17 điểm COCO keypoints:
+### 2.3. One-Stage Perception & Pose Estimation (`src/pose/`)
+* **`PoseEstimator` Interface (RTMO-s)**:
+  * Model: **RTMO-s** (One-stage Multi-Person Pose Estimation compiled to TensorRT FP16).
+  * Gộp đồng thời Detection + 17 điểm COCO keypoints:
     * Mũi, 2 mắt, 2 tai (Head/Face)
     * 2 vai, 2 khuỷu tay, 2 cổ tay (Upper Body)
     * 2 hông, 2 đầu gối, 2 mắt cá chân (Lower Body)

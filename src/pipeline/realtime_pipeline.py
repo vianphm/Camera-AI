@@ -22,6 +22,7 @@ from src.anomaly.anomaly_score import ReconstructionAnomalyScorer, AnomalyResult
 from src.risk.risk_engine import RiskEngine, RiskAssessment
 from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
+from src.detection.motion_gater import MotionGater, MotionGateResult
 from src.utils.visualizer import PipelineVisualizer
 from src.utils.privacy import FaceBlurrer
 from src.utils.profiler import LatencyProfiler, ResourceMonitor
@@ -54,10 +55,12 @@ class RealtimePipeline:
         risk_engine: Optional[RiskEngine] = None,
         alert_manager: Optional[AlertManager] = None,
         visualizer: Optional[PipelineVisualizer] = None,
+        motion_gater: Optional[MotionGater] = None,
         blur_faces: bool = False,
         single_pass: bool = True,
     ) -> None:
         # Load configs
+
         try:
             model_cfg = load_config("model.yaml")
         except Exception:
@@ -134,7 +137,23 @@ class RealtimePipeline:
         self.thresholds = ThresholdManager()
         self.risk_engine = risk_engine or RiskEngine(self.thresholds)
 
-        # 6.5. Tier 1 Kinematic Gated Trigger
+        # 6.5. Tier-0 Motion Gater & Tier-1 Kinematic Gated Trigger
+        motion_cfg = model_cfg.get("motion_gating", {})
+        enable_t0 = infer_cfg.get("scheduling", {}).get("enable_tier0_motion_gating", True) and motion_cfg.get("enabled", True)
+        self.motion_gater = motion_gater or MotionGater(
+            enabled=enable_t0,
+            method=motion_cfg.get("method", "mog2"),
+            min_motion_ratio=motion_cfg.get("min_motion_ratio", 0.001),
+            history=motion_cfg.get("history", 100),
+            var_threshold=motion_cfg.get("var_threshold", 16.0),
+            detect_shadows=motion_cfg.get("detect_shadows", False),
+            cooldown_frames=motion_cfg.get("cooldown_frames", 45),
+            idle_fps=motion_cfg.get("idle_fps", 12.0),
+            active_fps=motion_cfg.get("active_fps", 30.0),
+            idle_stride=motion_cfg.get("idle_stride", 2),
+            downsample_size=(motion_cfg.get("downsample_width", 320), motion_cfg.get("downsample_height", 240)),
+            periodic_check_interval=motion_cfg.get("periodic_check_interval", 45),
+        )
         self.gated_trigger = KinematicGatedTrigger(hold_on_frames=45)
         self.iou_match_thresh = 0.70
         self._prev_raw_keypoints: Dict[int, np.ndarray] = {}
@@ -156,6 +175,77 @@ class RealtimePipeline:
         self.profiler.start_frame()
         self._frame_count += 1
         annotated_frame = frame.copy()
+
+        # STAGE 0: Tier-0 Motion Gating (Background Subtraction / Pixel Differencing)
+        self.profiler.start("tier0_motion")
+        has_active = bool(self.tracker.tracks) if hasattr(self.tracker, "tracks") else False
+        gate_res = self.motion_gater.evaluate(frame, has_active_tracks=has_active)
+        self.profiler.stop("tier0_motion")
+
+        # Case 1: Throttled idle frame (reducing FPS to 10-15 FPS when room is static)
+        if gate_res.is_throttled_frame:
+            fps = self.profiler.fps
+            telemetry = {
+                **self.profiler.get_summary(),
+                **self.resource_monitor.get_telemetry(),
+                "active_tracks_count": 0,
+                "tier0_status": gate_res.status,
+                "tier0_motion_ratio": gate_res.motion_ratio,
+                "tier0_cooldown": gate_res.cooldown_remaining,
+                "tier0_rationale": gate_res.rationale,
+                "ai_bypassed": True,
+            }
+            if self.visualizer:
+                annotated_frame = self.visualizer.draw_hud(
+                    frame=annotated_frame,
+                    fps=fps,
+                    active_tracks=0,
+                    system_status="TIER-0 IDLE",
+                    telemetry=telemetry,
+                )
+            return PipelineFrameResult(
+                frame_idx=self._frame_count,
+                timestamp=timestamp,
+                annotated_frame=annotated_frame,
+                tracks=[],
+                poses=[],
+                assessments=[],
+                alerts=[],
+                telemetry=telemetry,
+            )
+
+        # Case 2: Static room (Gate CLOSED -> Completely bypass AI inference, 0% GPU load)
+        if not gate_res.should_run_ai:
+            fps = self.profiler.fps
+            telemetry = {
+                **self.profiler.get_summary(),
+                **self.resource_monitor.get_telemetry(),
+                "active_tracks_count": 0,
+                "tier0_status": gate_res.status,
+                "tier0_motion_ratio": gate_res.motion_ratio,
+                "tier0_cooldown": gate_res.cooldown_remaining,
+                "tier0_rationale": gate_res.rationale,
+                "ai_bypassed": True,
+            }
+
+            if self.visualizer:
+                annotated_frame = self.visualizer.draw_hud(
+                    frame=annotated_frame,
+                    fps=fps,
+                    active_tracks=0,
+                    system_status="TIER-0 IDLE",
+                    telemetry=telemetry,
+                )
+            return PipelineFrameResult(
+                frame_idx=self._frame_count,
+                timestamp=timestamp,
+                annotated_frame=annotated_frame,
+                tracks=[],
+                poses=[],
+                assessments=[],
+                alerts=[],
+                telemetry=telemetry,
+            )
 
         poses: List[PoseResult] = []
 
@@ -349,13 +439,20 @@ class RealtimePipeline:
             **self.profiler.get_summary(),
             **self.resource_monitor.get_telemetry(),
             "active_tracks_count": len(active_tracks),
+            "tier0_status": gate_res.status,
+            "tier0_motion_ratio": gate_res.motion_ratio,
+            "tier0_cooldown": gate_res.cooldown_remaining,
+            "tier0_rationale": gate_res.rationale,
+            "ai_bypassed": False,
         }
         self.visualizer.draw_hud(
             frame=annotated_frame,
             fps=self.profiler.fps,
             active_tracks=len(active_tracks),
+            system_status=f"ONLINE ({gate_res.status})",
             telemetry=telemetry,
         )
+
 
         return PipelineFrameResult(
             frame_idx=self._frame_count,

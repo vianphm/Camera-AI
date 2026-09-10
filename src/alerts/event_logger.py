@@ -108,3 +108,39 @@ class EventLogger:
             except Exception:
                 with open(self.jsonl_file, "w", encoding="utf-8") as f:
                     f.truncate(0)
+
+    def delete_event(self, event_id: str) -> bool:
+        """Permanently remove a single event by event_id from storage and disk."""
+        if not self.jsonl_file.exists():
+            return False
+
+        remaining_events = []
+        found = False
+        with open(self.jsonl_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    if data.get("event_id") == event_id:
+                        found = True
+                        # Remove snapshot if exists
+                        snapshot_path = data.get("snapshot_path")
+                        if snapshot_path:
+                            try:
+                                snap_full = get_project_root() / snapshot_path
+                                if snap_full.exists():
+                                    snap_full.unlink()
+                            except Exception:
+                                pass
+                        continue
+                    remaining_events.append(data)
+                except json.JSONDecodeError:
+                    continue
+
+        if found:
+            with open(self.jsonl_file, "w", encoding="utf-8") as f:
+                for ev in remaining_events:
+                    f.write(json.dumps(ev) + "\n")
+        return found

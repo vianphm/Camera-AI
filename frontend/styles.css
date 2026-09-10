@@ -698,7 +698,97 @@ body {
 .workspace-col.col-analytics {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+}
+
+/* Metrics Table (Dạng Bảng Gọn & Dễ Nhìn, Chữ & Số Đồng Nhất Kích Thước 12px) */
+.metrics-card {
+  border-radius: var(--radius-lg);
+}
+
+.metrics-table-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.metrics-table th {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  letter-spacing: 0.5px;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.metrics-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+  font-size: 12px;
+}
+
+.metrics-table tr:last-child td {
+  border-bottom: none;
+}
+
+.metrics-table tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.tbl-metric-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tbl-metric-icon {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+.tbl-val-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.tbl-val-wrap .kpi-value {
+  font-family: var(--font-mono);
+  font-size: 12px !important;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tbl-val-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tbl-risk-badge {
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.metrics-table .kpi-indicator {
+  font-size: 12px;
 }
 
 /* Person Diagnostics Table */
@@ -763,6 +853,8 @@ body {
 .alerts-card {
   flex: 1;
   min-height: 280px;
+  position: relative;
+  overflow: visible !important;
 }
 
 .alerts-counter {
@@ -846,6 +938,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
 }
 
 .alert-item-title {
@@ -857,11 +950,384 @@ body {
   color: #fca5a5;
 }
 
+.alert-item-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .alert-item-time {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
 }
+
+/* ==========================================================================
+   CHROME-STYLE 3-DOTS ACTION MENU (THEO ĐÚNG MẪU GOOGLE CHROME)
+   ========================================================================== */
+.header-menu-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-chrome-more {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  padding: 0;
+}
+
+.btn-chrome-more svg {
+  fill: currentColor;
+}
+
+.btn-chrome-more:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.btn-chrome-more.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+/* Chrome-Style Dropdown Container */
+.chrome-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #1f1f23;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75), 0 2px 8px rgba(0, 0, 0, 0.5);
+  padding: 6px;
+  min-width: 295px;
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chrome-menu-dropdown.show {
+  display: flex;
+  animation: chrome-menu-appear 0.15s cubic-bezier(0, 0, 0.2, 1);
+}
+
+@keyframes chrome-menu-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Chrome Header Notice (Top Row giống mục an toàn của Chrome) */
+.chrome-menu-header-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+}
+
+.chrome-menu-header-notice .notice-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.chrome-menu-header-notice .notice-icon {
+  font-size: 15px;
+}
+
+.chrome-menu-header-notice .notice-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chrome-menu-header-notice .notice-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+}
+
+/* Chrome Profile-Style Row (Khung tài khoản Cường - Signed in >) */
+.chrome-menu-profile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin: 2px 0;
+}
+
+.profile-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.profile-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.profile-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.profile-sub {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+/* Nút dạng viên thuốc xanh (Signed in > trong Chrome) */
+.chrome-signed-pill {
+  font-family: var(--font-heading);
+  background: #0b57d0;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 4px rgba(11, 87, 208, 0.4);
+}
+
+/* Chrome Dividers */
+.chrome-menu-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Chrome Menu Item */
+.chrome-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+  user-select: none;
+  gap: 14px;
+}
+
+.chrome-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chrome-menu-item .item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chrome-menu-item .item-icon {
+  font-size: 15px;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.chrome-menu-item .item-label {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: #e3e3e3;
+}
+
+.chrome-menu-item:hover .item-label {
+  color: #ffffff;
+}
+
+.chrome-menu-item .item-right {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #9aa0a6;
+  font-weight: 500;
+}
+
+/* Status Badge Pill (BẬT / TẮT) */
+.item-badge-status {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.status-on {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.status-off {
+  background: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+  border: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+/* Danger Menu Item (Xóa vĩnh viễn) */
+.chrome-menu-item.item-danger .item-label {
+  color: #fca5a5;
+}
+
+.chrome-menu-item.item-danger:hover {
+  background: rgba(239, 68, 68, 0.16);
+}
+
+.chrome-menu-item.item-danger:hover .item-label {
+  color: #ef4444;
+}
+
+.chrome-menu-item.item-danger .item-right {
+  color: #fca5a5;
+}
+
+/* 3-Dots Options Menu Wrapper */
+.alert-menu-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-alert-menu {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-secondary);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.2s ease;
+  user-select: none;
+  padding: 0;
+}
+
+.btn-alert-menu:hover,
+.btn-alert-menu.active {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  transform: scale(1.06);
+}
+
+/* Dropdown Menu */
+.alert-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: rgba(17, 24, 39, 0.98);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 15px rgba(239, 68, 68, 0.2);
+  padding: 5px;
+  min-width: 155px;
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.alert-menu-dropdown.show {
+  display: flex;
+  animation: dropdown-pop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropdown-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.alert-menu-dropdown .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fca5a5;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.alert-menu-dropdown .dropdown-item:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ffffff;
+}
+
+.alert-menu-dropdown .dropdown-item:active {
+  transform: scale(0.98);
+}
+
 
 .alert-item-msg {
   font-size: 12px;
@@ -905,6 +1371,7 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
 
 /* ==========================================================================
    FALL EMERGENCY RED BORDER & FLASHING SIREN ALERTS
@@ -986,6 +1453,30 @@ body {
   border-color: #ef4444;
   color: #ffffff;
   transform: translateY(-1px);
+}
+
+/* Styled Clear Temporary Alerts Button */
+.btn-warning-outline {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-warning-outline:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
 }
 
 /* Styled Test Chime Button */

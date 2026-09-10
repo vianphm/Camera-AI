@@ -27,6 +27,7 @@ from src.anomaly.anomaly_score import ReconstructionAnomalyScorer, AnomalyResult
 from src.risk.risk_engine import RiskEngine, RiskAssessment
 from src.risk.threshold_manager import ThresholdManager
 from src.alerts.alert_manager import AlertManager, AlertEvent
+from src.detection.motion_gater import MotionGater, MotionGateResult
 from src.utils.visualizer import PipelineVisualizer
 from src.utils.profiler import LatencyProfiler, ResourceMonitor
 from src.utils.config import load_config
@@ -160,7 +161,26 @@ class DecoupledPipeline:
         self.thresholds = ThresholdManager()
         self.risk_engine = RiskEngine(self.thresholds)
 
+        # 6.2. Tier-0 Motion Gating
+        motion_cfg = model_cfg.get("motion_gating", {})
+        enable_t0 = infer_cfg.get("scheduling", {}).get("enable_tier0_motion_gating", True) and motion_cfg.get("enabled", True)
+        self.motion_gater = MotionGater(
+            enabled=enable_t0,
+            method=motion_cfg.get("method", "mog2"),
+            min_motion_ratio=motion_cfg.get("min_motion_ratio", 0.001),
+            history=motion_cfg.get("history", 100),
+            var_threshold=motion_cfg.get("var_threshold", 16.0),
+            detect_shadows=motion_cfg.get("detect_shadows", False),
+            cooldown_frames=motion_cfg.get("cooldown_frames", 45),
+            idle_fps=motion_cfg.get("idle_fps", 12.0),
+            active_fps=motion_cfg.get("active_fps", 30.0),
+            idle_stride=motion_cfg.get("idle_stride", 2),
+            downsample_size=(motion_cfg.get("downsample_width", 320), motion_cfg.get("downsample_height", 240)),
+            periodic_check_interval=motion_cfg.get("periodic_check_interval", 45),
+        )
+
         # 6.5. Tier 1 Kinematic Gated Trigger (Hold-on timer 45 frames ~ 3.0s)
+
         self.gated_trigger = KinematicGatedTrigger(
             hold_on_frames=45,
             ground_proximity_thresh=0.22,
@@ -230,11 +250,33 @@ class DecoupledPipeline:
             if self._ai_frame_count % self.ai_stride != 0:
                 continue
 
+            # 0. Tier-0 Motion Gating
+            has_active = bool(self.tracker.tracks) if hasattr(self.tracker, "tracks") else False
+            gate_res = self.motion_gater.evaluate(packet.frame, has_active_tracks=has_active)
+            if not gate_res.should_run_ai or gate_res.is_throttled_frame:
+                self.shared_state.update(
+                    active_tracks=[],
+                    poses_dict={},
+                    assessments={},
+                    ai_latency_ms=0.0,
+                    ai_fps=self.ai_profiler.fps,
+                    telemetry={
+                        "tier0_status": gate_res.status,
+                        "tier0_motion_ratio": gate_res.motion_ratio,
+                        "tier0_cooldown": gate_res.cooldown_remaining,
+                        "tier0_rationale": gate_res.rationale,
+                        "ai_bypassed": True,
+                    }
+                )
+                time.sleep(1.0 / self.motion_gater.idle_fps)
+                continue
+
             t_start = time.perf_counter()
             self.ai_profiler.start_frame()
 
             # 1. Single-Pass Perception (YOLO-Pose extracts both BBoxes & Skeletons)
             detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(packet.frame)
+
 
             # 2. ByteTrack with Fall Protection
             active_tracks = self.tracker.update(detections, packet.timestamp)
