@@ -18,7 +18,7 @@ scheduling:
 
 display:
   show_ui: true
-  window_name: "Elderly AI Monitor - Realtime Stream"
+  window_name: "Fall and Stroke Warning System - Realtime Stream"
   show_bbox: true
   show_skeleton: true
   show_track_id: true

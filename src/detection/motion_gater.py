@@ -111,6 +111,20 @@ class MotionGater:
         """
         self._frame_count += 1
 
+        # Safeguard 0: Always run AI on initial startup frames to discover people already in room
+        if self._frame_count <= 5:
+            self._cooldown_counter = self.cooldown_frames
+            return MotionGateResult(
+                should_run_ai=True,
+                motion_detected=True,
+                motion_ratio=1.0,
+                cooldown_remaining=self._cooldown_counter,
+                is_throttled_frame=False,
+                target_fps=self.active_fps,
+                rationale="Startup initialization scan",
+                status="INIT",
+            )
+
         if not self.enabled:
             return MotionGateResult(
                 should_run_ai=True,

@@ -71,9 +71,19 @@ class RealtimePipeline:
         except Exception:
             infer_cfg = {}
 
-        import torch
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            has_cuda = False
+            try:
+                import onnxruntime as ort
+                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+            except ImportError:
+                has_cuda = False
+
         dev = infer_cfg.get("runtime", {}).get("device", "cuda")
-        if dev == "cuda" and not torch.cuda.is_available():
+        if dev == "cuda" and not has_cuda:
             dev = "cpu"
         self.device = dev
         self.use_fp16 = infer_cfg.get("runtime", {}).get("use_fp16", True) and (dev != "cpu")
@@ -345,10 +355,14 @@ class RealtimePipeline:
                 )
                 self.sequence_buffer.add_snapshot(tid, snapshot)
 
-            # Retrieve temporal sequence
-            seq = self.sequence_buffer.get_normalized_sequence(tid)
-            if seq is not None and self.sequence_buffer.is_ready(tid):
-                snapshots_hist = self.sequence_buffer.get_snapshots(tid)
+            # Retrieve temporal sequence. Only 3 snapshots are needed for the
+            # Tier-1 kinematic gate to compute Vy/Ay (velocity/acceleration) —
+            # waiting for the full sequence_buffer.is_ready() window (~1s) left
+            # brand-new or just-reset track_ids completely unmonitored during
+            # the critical first second of a fall.
+            snapshots_hist = self.sequence_buffer.get_snapshots(tid)
+            if len(snapshots_hist) >= 3:
+                seq = self.sequence_buffer.get_normalized_sequence(tid)
                 kinematics = self.feature_extractor.extract(snapshots_hist)
 
                 # Previous state for hysteresis

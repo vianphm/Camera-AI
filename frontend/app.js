@@ -38,12 +38,36 @@
   const elVideoStream = document.getElementById("live-video-stream");
   const elOfflineOverlay = document.getElementById("stream-offline-overlay");
   const elBtnStartOverlay = document.getElementById("btn-start-camera-overlay");
+
+  // Camera Management DOM Elements
+  const elCameraTypeSelect = document.getElementById("camera-type-select");
+  const elGroupWebcamDevice = document.getElementById("group-webcam-device");
+  const elWebcamDeviceSelect = document.getElementById("webcam-device-select");
+  const elBtnScanWebcams = document.getElementById("btn-scan-webcams");
+
+  const elGroupRtspPreset = document.getElementById("group-rtsp-preset");
+  const elRtspPresetSelect = document.getElementById("rtsp-preset-select");
+  const elGroupRtspUrlRow = document.getElementById("group-rtsp-url-row");
+  const elRtspUrlInput = document.getElementById("rtsp-url-input");
+
+  const elGroupVideoPreset = document.getElementById("group-video-preset");
+  const elVideoPresetSelect = document.getElementById("video-preset-select");
+  const elGroupVideoCustomRow = document.getElementById("group-video-custom-row");
+  const elCustomVideoPathInput = document.getElementById("custom-video-path-input");
+
+  const elBtnApplyCamera = document.getElementById("btn-apply-camera");
+  const elBtnApplyTxt = document.getElementById("btn-apply-txt");
+  const elCamSpinner = document.getElementById("cam-spinner");
+  const elBtnSaveCameraDefault = document.getElementById("btn-save-camera-default");
   const elBtnCameraToggle = document.getElementById("btn-camera-toggle");
-  const elBtnCameraReset = document.getElementById("btn-camera-reset");
+  const elBtnCamToggleIcon = document.getElementById("btn-cam-toggle-icon");
+  const elBtnCamToggleTxt = document.getElementById("btn-cam-toggle-txt");
   const elBtnRefreshStream = document.getElementById("btn-refresh-stream");
-  const elSourceSelect = document.getElementById("camera-source-select");
-  const elRtspGroup = document.getElementById("rtsp-input-group");
-  const elRtspInput = document.getElementById("rtsp-url-input");
+
+  const elCamToastFeedback = document.getElementById("cam-toast-feedback");
+  const elCamActiveStatusPill = document.getElementById("cam-active-status-pill");
+  const elCamActiveNameTxt = document.getElementById("cam-active-name-txt");
+  const elHudCamName = document.getElementById("hud-cam-name");
 
   const elEmergencyBar = document.getElementById("emergency-alert-bar");
   const elBtnDismissAlert = document.getElementById("btn-dismiss-alert");
@@ -483,21 +507,29 @@
 
       // Update button labels
       if (isCameraRunning) {
-        elBtnCameraToggle.textContent = "DỪNG CAMERA";
-        elBtnCameraToggle.style.background = "#dc2626";
-        elBtnCameraToggle.style.color = "#ffffff";
-        elOfflineOverlay.style.display = "none";
+        if (elBtnCamToggleTxt) elBtnCamToggleTxt.textContent = "DỪNG STREAM";
+        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "⏹️";
+        if (elBtnCameraToggle) {
+          elBtnCameraToggle.style.background = "rgba(239, 68, 68, 0.2)";
+          elBtnCameraToggle.style.borderColor = "rgba(239, 68, 68, 0.4)";
+          elBtnCameraToggle.style.color = "#f87171";
+        }
+        if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
         
         // Ensure stream URL is attached
         const streamUrl = `${API_BASE}/stream/mjpeg`;
-        if (!elVideoStream.src || elVideoStream.src !== streamUrl) {
+        if (!elVideoStream.src || elVideoStream.src.indexOf("/stream/mjpeg") === -1) {
           elVideoStream.src = streamUrl;
         }
       } else {
-        elBtnCameraToggle.textContent = "KHỞI ĐỘNG CAMERA";
-        elBtnCameraToggle.style.background = "";
-        elBtnCameraToggle.style.color = "";
-        elOfflineOverlay.style.display = "flex";
+        if (elBtnCamToggleTxt) elBtnCamToggleTxt.textContent = "BẬT STREAM";
+        if (elBtnCamToggleIcon) elBtnCamToggleIcon.textContent = "▶️";
+        if (elBtnCameraToggle) {
+          elBtnCameraToggle.style.background = "";
+          elBtnCameraToggle.style.borderColor = "";
+          elBtnCameraToggle.style.color = "";
+        }
+        if (elOfflineOverlay) elOfflineOverlay.style.display = "flex";
       }
 
       // Update simulated or active persons in table
@@ -599,78 +631,251 @@
     }
   };
 
-  // Toggle Source selection
-  elSourceSelect.addEventListener("change", (e) => {
-    if (e.target.value === "rtsp") {
-      elRtspGroup.style.display = "block";
-    } else {
-      elRtspGroup.style.display = "none";
-    }
-  });
-
-  // Clean Start / Reset Camera
-  async function resetCamera() {
-    elBtnCameraToggle.textContent = "ĐANG KHỞI TẠO...";
-    if (elBtnCameraReset) elBtnCameraReset.textContent = "ĐANG RESET...";
-    const sourceType = elSourceSelect.value;
-    const rtspUrl = elRtspInput.value.trim() || undefined;
-
-    try {
-      const res = await fetch(`${API_BASE}/camera/reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source_type: sourceType,
-          rtsp_url: rtspUrl,
-        }),
-      });
-
-      if (res.ok) {
-        isCameraRunning = true;
-        elOfflineOverlay.style.display = "none";
-        // Re-attach live stream with timestamp
-        setTimeout(() => {
-          elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
-          pollStatus();
-        }, 300);
-      } else {
-        const err = await res.json();
-        alert("Không thể khởi động camera: " + (err.detail || "Lỗi thiết bị"));
-        pollStatus();
-      }
-    } catch (e) {
-      alert("Lỗi kết nối tới Backend API: " + e.message);
-      pollStatus();
-    } finally {
-      if (elBtnCameraReset) elBtnCameraReset.textContent = "RESET CAMERA";
+  // Toast feedback message helper
+  let camToastTimer = null;
+  function showCamFeedback(msg, type = "info", duration = 4500) {
+    if (!elCamToastFeedback) return;
+    if (camToastTimer) clearTimeout(camToastTimer);
+    elCamToastFeedback.className = `cam-toast-feedback toast-${type}`;
+    elCamToastFeedback.innerHTML = `<span>${type === "success" ? "✅" : (type === "error" ? "❌" : "ℹ️")}</span> <span>${msg}</span>`;
+    elCamToastFeedback.style.display = "flex";
+    if (duration > 0) {
+      camToastTimer = setTimeout(() => {
+        elCamToastFeedback.style.display = "none";
+      }, duration);
     }
   }
 
-  // Camera Toggle
+  // Preset RTSP templates
+  const RTSP_TEMPLATES = {
+    custom: "",
+    hikvision: "rtsp://admin:password123@192.168.1.100:554/Streaming/Channels/101",
+    dahua: "rtsp://admin:password123@192.168.1.100:554/cam/realmonitor?channel=1&subtype=0",
+    yoosee: "rtsp://admin:123456@192.168.1.100:554/onvif1",
+    tapo: "rtsp://admin:password123@192.168.1.100:554/stream1",
+    ezviz: "rtsp://admin:VERIFICATION_CODE@192.168.1.100:554/h264/ch1/main/av_stream",
+  };
+
+  // Fetch Available Webcam Devices on Machine
+  async function fetchCameraDevices() {
+    if (!elWebcamDeviceSelect) return;
+    try {
+      if (elBtnScanWebcams) {
+        elBtnScanWebcams.disabled = true;
+        elBtnScanWebcams.textContent = "⏳ Đang quét...";
+      }
+      const res = await fetch(`${API_BASE}/camera/devices`);
+      if (!res.ok) return;
+      const devices = await res.json();
+      if (Array.isArray(devices) && devices.length > 0) {
+        elWebcamDeviceSelect.innerHTML = "";
+        devices.forEach((dev) => {
+          const opt = document.createElement("option");
+          opt.value = dev.device_index;
+          opt.textContent = `${dev.name} (${dev.resolution || "720p"})`;
+          if (dev.is_active) opt.selected = true;
+          elWebcamDeviceSelect.appendChild(opt);
+        });
+      }
+    } catch (err) {
+      console.warn("[Dashboard] Lỗi khi quét danh sách camera:", err);
+    } finally {
+      if (elBtnScanWebcams) {
+        elBtnScanWebcams.disabled = false;
+        elBtnScanWebcams.textContent = "🔍 Quét";
+      }
+    }
+  }
+
+  // Fetch Active Camera Status & Information
+  async function fetchCameraInfo() {
+    try {
+      const res = await fetch(`${API_BASE}/camera/info`);
+      if (!res.ok) return;
+      const info = await res.json();
+      if (info) {
+        const srcType = info.source_type || "webcam";
+        if (elCameraTypeSelect) {
+          elCameraTypeSelect.value = srcType === "synthetic" ? "video" : srcType;
+        }
+        handleCameraTypeChange();
+
+        if (info.device_index !== undefined && elWebcamDeviceSelect) {
+          elWebcamDeviceSelect.value = String(info.device_index);
+        }
+        if (info.rtsp_url && elRtspUrlInput) {
+          elRtspUrlInput.value = info.rtsp_url;
+        }
+
+        const camName = info.name || (srcType === "webcam" ? `Webcam ${info.device_index ?? 0}` : (srcType === "rtsp" ? "RTSP Camera" : "Video File"));
+        if (elCamActiveNameTxt) elCamActiveNameTxt.textContent = camName;
+        if (elHudCamName) elHudCamName.textContent = `CAM: ${camName.toUpperCase()}`;
+      }
+    } catch (_) {}
+  }
+
+  // Handle Camera Type Switch (Webcam / RTSP / Video)
+  function handleCameraTypeChange() {
+    const selectedType = elCameraTypeSelect ? elCameraTypeSelect.value : "webcam";
+    if (elGroupWebcamDevice) elGroupWebcamDevice.style.display = selectedType === "webcam" ? "flex" : "none";
+    if (elGroupRtspPreset) elGroupRtspPreset.style.display = selectedType === "rtsp" ? "flex" : "none";
+    if (elGroupRtspUrlRow) elGroupRtspUrlRow.style.display = selectedType === "rtsp" ? "flex" : "none";
+    if (elGroupVideoPreset) elGroupVideoPreset.style.display = selectedType === "video" ? "flex" : "none";
+    if (elGroupVideoCustomRow) {
+      elGroupVideoCustomRow.style.display = (selectedType === "video" && elVideoPresetSelect && elVideoPresetSelect.value === "custom") ? "flex" : "none";
+    }
+  }
+
+  if (elCameraTypeSelect) {
+    elCameraTypeSelect.addEventListener("change", handleCameraTypeChange);
+  }
+
+  if (elRtspPresetSelect) {
+    elRtspPresetSelect.addEventListener("change", (e) => {
+      const presetKey = e.target.value;
+      if (RTSP_TEMPLATES[presetKey] && elRtspUrlInput) {
+        elRtspUrlInput.value = RTSP_TEMPLATES[presetKey];
+        elRtspUrlInput.focus();
+      }
+    });
+  }
+
+  if (elVideoPresetSelect) {
+    elVideoPresetSelect.addEventListener("change", (e) => {
+      if (elGroupVideoCustomRow) {
+        elGroupVideoCustomRow.style.display = e.target.value === "custom" ? "flex" : "none";
+      }
+    });
+  }
+
+  if (elBtnScanWebcams) {
+    elBtnScanWebcams.addEventListener("click", () => {
+      fetchCameraDevices();
+      showCamFeedback("Đang quét các cổng webcam trên máy tính...", "info", 2000);
+    });
+  }
+
+  // Apply & Switch Camera
+  async function applyCameraSwitch(saveDefault = false) {
+    const srcType = elCameraTypeSelect ? elCameraTypeSelect.value : "webcam";
+    let devIndex = 0;
+    let rtspUrl = "";
+    let videoPath = "";
+
+    if (srcType === "webcam") {
+      devIndex = parseInt(elWebcamDeviceSelect ? elWebcamDeviceSelect.value : "0", 10) || 0;
+    } else if (srcType === "rtsp") {
+      rtspUrl = elRtspUrlInput ? elRtspUrlInput.value.trim() : "";
+      if (!rtspUrl) {
+        showCamFeedback("Vui lòng nhập đường dẫn RTSP Camera (ví dụ: rtsp://admin:pass@192.168.1.100:554/stream)", "error", 4000);
+        if (elRtspUrlInput) elRtspUrlInput.focus();
+        return;
+      }
+    } else if (srcType === "video") {
+      const preset = elVideoPresetSelect ? elVideoPresetSelect.value : "data/videos/sample_adl_fall.mp4";
+      if (preset === "custom") {
+        videoPath = elCustomVideoPathInput ? elCustomVideoPathInput.value.trim() : "";
+        if (!videoPath) {
+          showCamFeedback("Vui lòng nhập đường dẫn tệp video MP4 cục bộ", "error", 3000);
+          return;
+        }
+      } else {
+        videoPath = preset;
+      }
+    }
+
+    // Set UI loading state
+    if (elBtnApplyCamera) elBtnApplyCamera.disabled = true;
+    if (elCamSpinner) elCamSpinner.style.display = "inline-block";
+    if (elBtnApplyTxt) elBtnApplyTxt.textContent = "ĐANG KẾT NỐI CAMERA...";
+    showCamFeedback("Đang giải phóng camera cũ và kết nối nguồn mới...", "info", 0);
+
+    try {
+      const res = await fetch(`${API_BASE}/camera/switch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_type: srcType,
+          device_index: devIndex,
+          rtsp_url: rtspUrl || undefined,
+          video_path: videoPath || undefined,
+          save_as_default: saveDefault,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.status === "success") {
+        isCameraRunning = true;
+        if (elOfflineOverlay) elOfflineOverlay.style.display = "none";
+        showCamFeedback(data.message || "Đã chuyển đổi camera thành công!", "success", 4000);
+
+        // Update active badge & HUD
+        const newName = data.camera_info?.name || "Camera";
+        if (elCamActiveNameTxt) elCamActiveNameTxt.textContent = newName;
+        if (elHudCamName) elHudCamName.textContent = `CAM: ${newName.toUpperCase()}`;
+
+        // Reload MJPEG stream with cachebuster
+        setTimeout(() => {
+          if (elVideoStream) {
+            elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
+          }
+          pollStatus();
+        }, 400);
+
+      } else {
+        const msg = data.detail || data.message || "Không thể kết nối đến camera được chọn.";
+        showCamFeedback(msg, "error", 6000);
+        pollStatus();
+      }
+    } catch (e) {
+      showCamFeedback("Lỗi kết nối tới Backend API: " + e.message, "error", 5000);
+      pollStatus();
+    } finally {
+      if (elBtnApplyCamera) elBtnApplyCamera.disabled = false;
+      if (elCamSpinner) elCamSpinner.style.display = "none";
+      if (elBtnApplyTxt) elBtnApplyTxt.textContent = "🔄 ÁP DỤNG & CHUYỂN CAMERA";
+    }
+  }
+
+  if (elBtnApplyCamera) {
+    elBtnApplyCamera.addEventListener("click", () => applyCameraSwitch(false));
+  }
+
+  if (elBtnSaveCameraDefault) {
+    elBtnSaveCameraDefault.addEventListener("click", () => applyCameraSwitch(true));
+  }
+
+  // Toggle Camera Start / Stop
   async function toggleCamera() {
     if (isCameraRunning) {
       try {
         await fetch(`${API_BASE}/camera/stop`, { method: "POST" });
         isCameraRunning = false;
-        elVideoStream.src = "";
-        elOfflineOverlay.style.display = "flex";
+        if (elVideoStream) elVideoStream.src = "";
+        if (elOfflineOverlay) elOfflineOverlay.style.display = "flex";
+        showCamFeedback("Đã tạm dừng luồng camera giám sát.", "info", 2500);
         pollStatus();
       } catch (e) {
-        alert("Lỗi khi dừng camera: " + e.message);
+        showCamFeedback("Lỗi khi dừng camera: " + e.message, "error", 3000);
       }
     } else {
-      await resetCamera();
+      await applyCameraSwitch(false);
     }
   }
 
-  elBtnCameraToggle.addEventListener("click", toggleCamera);
-  elBtnStartOverlay.addEventListener("click", resetCamera);
-  if (elBtnCameraReset) elBtnCameraReset.addEventListener("click", resetCamera);
+  if (elBtnCameraToggle) elBtnCameraToggle.addEventListener("click", toggleCamera);
+  if (elBtnStartOverlay) elBtnStartOverlay.addEventListener("click", () => applyCameraSwitch(false));
 
   // Refresh stream
-  elBtnRefreshStream.addEventListener("click", () => {
-    elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
-  });
+  if (elBtnRefreshStream) {
+    elBtnRefreshStream.addEventListener("click", () => {
+      if (elVideoStream) {
+        elVideoStream.src = `${API_BASE}/stream/mjpeg?t=${Date.now()}`;
+        showCamFeedback("Đã tải lại luồng hiển thị video.", "info", 2000);
+      }
+    });
+  }
 
   // Dismiss Emergency Banner & Silence Alarm
   elBtnDismissAlert.addEventListener("click", () => {
@@ -782,18 +987,71 @@
       // Close other item dropdowns
       document.querySelectorAll(".alert-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
       document.querySelectorAll(".btn-alert-menu.active").forEach((el) => el.classList.remove("active"));
+      document.querySelectorAll(".bubble-popover-menu.show").forEach((el) => el.classList.remove("show"));
+      document.querySelectorAll(".btn-bubble-dots.active").forEach((el) => el.classList.remove("active"));
 
       elAlertsMenuDropdown.classList.toggle("show");
       elBtnAlertsMenuToggle.classList.toggle("active");
     });
   }
 
-  // Đóng toàn bộ dropdown 3 chấm khi click ra ngoài
+  // Camera 3-Dots Bubble Popover Menu (Image 2 style)
+  const elBtnCamMenuToggle = document.getElementById("btn-cam-menu-toggle");
+  const elCamPopoverMenu = document.getElementById("cam-popover-menu");
+
+  if (elBtnCamMenuToggle && elCamPopoverMenu) {
+    elBtnCamMenuToggle.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+      // Close alert dropdown
+      if (elAlertsMenuDropdown) elAlertsMenuDropdown.classList.remove("show");
+      if (elBtnAlertsMenuToggle) elBtnAlertsMenuToggle.classList.remove("active");
+
+      const isOpen = elCamPopoverMenu.classList.toggle("show");
+      elBtnCamMenuToggle.classList.toggle("active", isOpen);
+    });
+
+    // Prevent accidental closing when interacting with controls inside popover
+    elCamPopoverMenu.addEventListener("click", (evt) => {
+      evt.stopPropagation();
+    });
+  }
+
+  // Snapshot Capture Button (Inside 3-Dots Popover)
+  const elBtnSnapshot = document.getElementById("btn-snapshot");
+  if (elBtnSnapshot) {
+    elBtnSnapshot.addEventListener("click", () => {
+      const videoImg = document.getElementById("live-video-stream");
+      if (!videoImg || !videoImg.naturalWidth) {
+        showCamFeedback("Chưa có luồng video hoạt động để chụp ảnh.", "error", 2500);
+        return;
+      }
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = videoImg.naturalWidth;
+        canvas.height = videoImg.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(videoImg, 0, 0);
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        link.download = `camera_snapshot_${timestamp}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        showCamFeedback("📸 Đã chụp và tải ảnh snapshot về máy!", "success", 2500);
+      } catch (err) {
+        console.warn("[Dashboard] Snapshot error:", err);
+        showCamFeedback("Đã lưu khung hình snapshot!", "info", 2500);
+      }
+    });
+  }
+
+  // Đóng toàn bộ dropdown / popover 3 chấm khi click ra ngoài
   document.addEventListener("click", () => {
     document.querySelectorAll(".alert-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
     document.querySelectorAll(".chrome-menu-dropdown.show").forEach((el) => el.classList.remove("show"));
+    document.querySelectorAll(".bubble-popover-menu.show").forEach((el) => el.classList.remove("show"));
     document.querySelectorAll(".btn-alert-menu.active").forEach((el) => el.classList.remove("active"));
     document.querySelectorAll(".btn-chrome-more.active").forEach((el) => el.classList.remove("active"));
+    document.querySelectorAll(".btn-bubble-dots.active").forEach((el) => el.classList.remove("active"));
   });
 
   const elSoundIconIndicator = document.getElementById("sound-icon-indicator");
@@ -846,11 +1104,161 @@
     }
   });
 
+  // ==============================================================================
+  // 9. SETTINGS MODAL CONTROLLER (BẢNG CÀI ĐẶT HỆ THỐNG GỌN GÀNG 1-CLICK)
+  // ==============================================================================
+  const elBtnOpenSettings = document.getElementById("btn-open-settings");
+  const elBtnCloseSettings = document.getElementById("btn-close-settings");
+  const elSettingsOverlay = document.getElementById("settings-modal-overlay");
+  const elToggleAutostart = document.getElementById("toggle-autostart");
+  const elAutostartPill = document.getElementById("autostart-status-pill");
+  const elAutostartFeedback = document.getElementById("autostart-feedback");
+  const elBtnCheckCamera = document.getElementById("btn-check-camera");
+  const elBtnOpenWinCamera = document.getElementById("btn-open-win-camera-settings");
+  const elCameraCheckFeedback = document.getElementById("camera-check-feedback");
+  const elToggleFaceBlur = document.getElementById("toggle-face-blur");
+  const elBtnModalShutdown = document.getElementById("btn-modal-shutdown");
+
+  function openSettingsModal() {
+    if (elSettingsOverlay) elSettingsOverlay.style.display = "flex";
+    fetchAutostartStatus();
+  }
+
+  function closeSettingsModal() {
+    if (elSettingsOverlay) elSettingsOverlay.style.display = "none";
+  }
+
+  if (elBtnOpenSettings) elBtnOpenSettings.addEventListener("click", openSettingsModal);
+  if (elBtnCloseSettings) elBtnCloseSettings.addEventListener("click", closeSettingsModal);
+  if (elSettingsOverlay) {
+    elSettingsOverlay.addEventListener("click", (e) => {
+      if (e.target === elSettingsOverlay) closeSettingsModal();
+    });
+  }
+
+  // 1. Khởi động cùng Windows
+  async function fetchAutostartStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/settings/autostart`);
+      if (res.ok) {
+        const data = await res.json();
+        if (elToggleAutostart) elToggleAutostart.checked = !!data.enabled;
+        updateAutostartPill(!!data.enabled);
+      }
+    } catch (_) {}
+  }
+
+  function updateAutostartPill(enabled) {
+    if (!elAutostartPill) return;
+    if (enabled) {
+      elAutostartPill.textContent = "Đang BẬT";
+      elAutostartPill.className = "badge-status-pill pill-on";
+    } else {
+      elAutostartPill.textContent = "Đang TẮT";
+      elAutostartPill.className = "badge-status-pill pill-off";
+    }
+  }
+
+  if (elToggleAutostart) {
+    elToggleAutostart.addEventListener("change", async () => {
+      const enabled = elToggleAutostart.checked;
+      try {
+        const res = await fetch(`${API_BASE}/api/settings/autostart?enable=${enabled}`, { method: "POST" });
+        const data = await res.json();
+        updateAutostartPill(data.enabled);
+        if (elAutostartFeedback) {
+          elAutostartFeedback.style.display = "block";
+          elAutostartFeedback.className = "settings-feedback feedback-success";
+          elAutostartFeedback.textContent = data.message || (enabled ? "Đã bật tự động chạy ngầm cùng Windows!" : "Đã tắt khởi động cùng Windows!");
+          setTimeout(() => { if (elAutostartFeedback) elAutostartFeedback.style.display = "none"; }, 4000);
+        }
+      } catch (err) {
+        if (elAutostartFeedback) {
+          elAutostartFeedback.style.display = "block";
+          elAutostartFeedback.className = "settings-feedback feedback-error";
+          elAutostartFeedback.textContent = "Lỗi khi cập nhật cài đặt khởi động.";
+        }
+      }
+    });
+  }
+
+  // 2. Quyền & Kiểm tra Camera
+  if (elBtnCheckCamera) {
+    elBtnCheckCamera.addEventListener("click", async () => {
+      elBtnCheckCamera.disabled = true;
+      elBtnCheckCamera.innerHTML = "<span>⏳</span> Đang kiểm tra...";
+      try {
+        const res = await fetch(`${API_BASE}/api/settings/check-camera`, { method: "POST" });
+        const data = await res.json();
+        if (elCameraCheckFeedback) {
+          elCameraCheckFeedback.style.display = "block";
+          if (data.status) {
+            elCameraCheckFeedback.className = "settings-feedback feedback-success";
+            elCameraCheckFeedback.textContent = `✓ ${data.message} (Cổng tìm thấy: ${data.working_devices?.join(", ") || "0"})`;
+          } else {
+            elCameraCheckFeedback.className = "settings-feedback feedback-error";
+            elCameraCheckFeedback.textContent = `⚠ ${data.message}`;
+          }
+        }
+      } catch (err) {
+        if (elCameraCheckFeedback) {
+          elCameraCheckFeedback.style.display = "block";
+          elCameraCheckFeedback.className = "settings-feedback feedback-error";
+          elCameraCheckFeedback.textContent = "Không thể kết nối API để kiểm tra camera.";
+        }
+      } finally {
+        elBtnCheckCamera.disabled = false;
+        elBtnCheckCamera.innerHTML = "<span>🔍</span> Kiểm tra Camera";
+      }
+    });
+  }
+
+  if (elBtnOpenWinCamera) {
+    elBtnOpenWinCamera.addEventListener("click", async () => {
+      try {
+        await fetch(`${API_BASE}/api/settings/open-camera-settings`, { method: "POST" });
+      } catch (_) {}
+    });
+  }
+
+  // 3. Làm mờ khuôn mặt (Face Blur Toggle)
+  if (elToggleFaceBlur) {
+    elToggleFaceBlur.addEventListener("change", async () => {
+      const blur = elToggleFaceBlur.checked;
+      try {
+        await fetch(`${API_BASE}/api/camera/blur?enabled=${blur}`, { method: "POST" });
+        const elBlurStatus = document.getElementById("hud-blur-status");
+        if (elBlurStatus) {
+          elBlurStatus.textContent = blur ? "MẶT: ĐÃ LÀM MỜ" : "MẶT: RÕ NÉT (KHÔNG LÀM MỜ)";
+        }
+      } catch (_) {}
+    });
+  }
+
+  // 4. Tắt hệ thống an toàn
+  if (elBtnModalShutdown) {
+    elBtnModalShutdown.addEventListener("click", async () => {
+      if (!confirm("Bạn có chắc chắn muốn TẮT hệ thống AI giám sát và dừng máy chủ không?")) return;
+      elBtnModalShutdown.disabled = true;
+      elBtnModalShutdown.textContent = "Đang tắt hệ thống...";
+      try {
+        await fetch(`${API_BASE}/api/system/shutdown`, { method: "POST" });
+        alert("Hệ thống đã dừng an toàn! Bạn có thể đóng cửa sổ trình duyệt này.");
+        window.close();
+      } catch (_) {
+        alert("Đã gửi lệnh tắt hệ thống.");
+      }
+    });
+  }
+
   // 10. Initialization Sequence
   connectAlertsWebSocket();
   fetchHistoricalEvents();
+  fetchCameraDevices();
+  fetchCameraInfo();
   pollStatus();
   pollHealth();
+  fetchAutostartStatus();
 
   // Polling intervals
   setInterval(pollStatus, 1500);

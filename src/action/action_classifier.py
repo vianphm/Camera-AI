@@ -4,8 +4,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 import numpy as np
-import torch
-from src.temporal.temporal_model import SpatialTemporalTransformer, TCNSequenceClassifier
+
+try:
+    import torch
+    from src.temporal.temporal_model import SpatialTemporalTransformer, TCNSequenceClassifier
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    SpatialTemporalTransformer = None
+    TCNSequenceClassifier = None
+    TORCH_AVAILABLE = False
+
+try:
+    import onnxruntime as ort
+    ORT_AVAILABLE = True
+except ImportError:
+    ort = None
+    ORT_AVAILABLE = False
+
+from src.utils.config import resolve_model_path
 
 ACTION_CLASSES: List[str] = [
     "walking",            # 0
@@ -54,30 +71,58 @@ class ActionClassifier:
         num_classes: int = 10,
         architecture: str = "tcn",
     ) -> None:
-        self.device = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
         self.num_classes = num_classes
         self.architecture = architecture.lower()
-
-        if self.architecture == "tcn":
-            self.model = TCNSequenceClassifier(input_dim=51, num_classes=num_classes)
-        else:
-            self.model = SpatialTemporalTransformer(input_dim=51, num_classes=num_classes)
-
         self.has_weights = False
+        self.ort_session = None
+        self.is_onnx = False
+        self.model = None
 
-        if weights_path and Path(weights_path).exists():
+        resolved_weights = None
+        if weights_path:
+            p = resolve_model_path(weights_path)
+            if p and p.exists():
+                resolved_weights = p
+            else:
+                p_onnx = resolve_model_path(str(weights_path).replace(".pt", ".onnx"))
+                if p_onnx and p_onnx.exists():
+                    resolved_weights = p_onnx
+
+        # 1. Try ONNX Runtime first if weights are .onnx
+        if resolved_weights and str(resolved_weights).endswith(".onnx") and ORT_AVAILABLE:
             try:
-                ckpt = torch.load(weights_path, map_location=self.device)
-                if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-                    self.model.load_state_dict(ckpt["model_state_dict"])
-                else:
-                    self.model.load_state_dict(ckpt)
+                providers = ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
+                available = ort.get_available_providers()
+                actual_providers = [p for p in providers if p in available]
+                self.ort_session = ort.InferenceSession(str(resolved_weights), providers=actual_providers)
+                self.is_onnx = True
                 self.has_weights = True
             except Exception as e:
-                print(f"[Warning] Failed to load action weights from {weights_path}: {e}")
+                print(f"[Warning] Failed to load ONNX action weights from {resolved_weights}: {e}")
 
-        self.model.to(self.device)
-        self.model.eval()
+        # 2. If not ONNX, fallback to PyTorch if available
+        if not self.has_weights and TORCH_AVAILABLE:
+            dev_str = device if torch.cuda.is_available() and device == "cuda" else "cpu"
+            self.device = torch.device(dev_str)
+            if self.architecture == "tcn" and TCNSequenceClassifier is not None:
+                self.model = TCNSequenceClassifier(input_dim=51, num_classes=num_classes)
+            elif SpatialTemporalTransformer is not None:
+                self.model = SpatialTemporalTransformer(input_dim=51, num_classes=num_classes)
+
+            if resolved_weights and Path(resolved_weights).exists():
+                try:
+                    ckpt = torch.load(resolved_weights, map_location=self.device, weights_only=False)
+                    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+                        self.model.load_state_dict(ckpt["model_state_dict"])
+                    else:
+                        self.model.load_state_dict(ckpt)
+                    self.has_weights = True
+                except Exception as e:
+                    print(f"[Warning] Failed to load action weights from {resolved_weights}: {e}")
+
+            if self.model is not None:
+                self.model.to(self.device)
+                self.model.eval()
 
     def predict(self, sequence: np.ndarray) -> ActionPrediction:
         """Predict action for a normalized sequence of shape (T, 17, 3).
@@ -90,10 +135,19 @@ class ActionClassifier:
         """
         # If model weights exist, run forward pass
         if self.has_weights:
-            with torch.no_grad():
-                tensor_seq = torch.from_numpy(sequence).unsqueeze(0).to(self.device)  # (1, T, 17, 3)
-                logits = self.model(tensor_seq)
-                probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
+            if self.is_onnx and self.ort_session is not None:
+                inp = sequence[np.newaxis, ...].astype(np.float32)
+                input_name = self.ort_session.get_inputs()[0].name
+                logits = self.ort_session.run(None, {input_name: inp})[0]
+                exp_l = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+                probs = (exp_l / np.sum(exp_l, axis=-1, keepdims=True))[0]
+            elif TORCH_AVAILABLE and self.model is not None:
+                with torch.no_grad():
+                    tensor_seq = torch.from_numpy(sequence).unsqueeze(0).to(self.device)  # (1, T, 17, 3)
+                    logits = self.model(tensor_seq)
+                    probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
+            else:
+                probs = self._heuristic_predict(sequence)
         else:
             # Fallback heuristic classifier when deep weights have not been trained yet
             probs = self._heuristic_predict(sequence)

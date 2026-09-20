@@ -4,28 +4,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Elderly AI Monitor — Real-time Video Intelligence Dashboard</title>
+  <title>Fall & Stroke Warning System — Real-time Video Intelligence Dashboard</title>
   <meta name="description"
-    content="Hệ thống giám sát camera và phát hiện hành vi bất thường thời gian thực cho người cao tuổi">
+    content="Hệ thống camera giám sát và cảnh báo té ngã, dấu hiệu đột quỵ thời gian thực">
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=20260913_3">
 </head>
 
 <body>
   <!-- Top Navigation Header -->
   <header class="app-header">
     <div class="header-brand">
-      <div class="brand-radar">
-        <span class="radar-circle"></span>
-        <span class="radar-scanner"></span>
-      </div>
+      <img src="logo.png" alt="Fall & Stroke Warning System Icon" class="brand-app-logo">
       <div class="brand-title">
-        <h1>ELDERLY AI MONITOR</h1>
+        <h1>FALL & STROKE WARNING SYSTEM</h1>
         <span class="brand-subtitle">Real-time Video Intelligence & Safety Surveillance</span>
       </div>
     </div>
@@ -43,18 +43,15 @@
       </div>
 
       <div class="digital-clock" id="digital-clock">00:00:00</div>
+
+      <!-- Settings Gear Button (Gọn ở góc màn hình) -->
+      <button class="btn-settings-gear" id="btn-open-settings" title="Cài đặt hệ thống">
+        <span class="gear-icon">⚙️</span>
+        <span class="gear-label">Cài Đặt</span>
+      </button>
     </div>
   </header>
 
-  <!-- Clinical Safety Notice Banner -->
-  <div class="safety-banner" id="safety-banner">
-    <span class="safety-icon">⚠️</span>
-    <span class="safety-text">
-      <strong>LƯU Ý AN TOÀN Y TẾ:</strong> Hệ thống là công cụ hỗ trợ giám sát an toàn, <strong>KHÔNG</strong> đưa ra
-      chẩn đoán y khoa tự động. Mọi cảnh báo phát ra dưới dạng: <em>"Possible medical emergency / abnormal behavior
-        detected. Please check the person."</em>
-    </span>
-  </div>
 
   <!-- Emergency Flash Banner (Hidden by default, pulses red on alert) -->
   <div class="emergency-alert-bar" id="emergency-alert-bar" style="display: none;">
@@ -84,8 +81,147 @@
               <span class="stream-pill" id="stream-pill">DIRECT MJPEG FEED</span>
             </div>
             <div class="card-actions">
-              <button class="btn-icon" id="btn-fullscreen" title="Toàn màn hình">⛶</button>
-              <button class="btn-icon" id="btn-snapshot" title="Chụp ảnh snapshot">📷</button>
+              <div class="cam-menu-wrapper" id="cam-menu-wrapper">
+                <button type="button" class="btn-bubble-dots" id="btn-cam-menu-toggle" title="Tùy chọn Camera & Thiết bị" aria-label="Tùy chọn Camera">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="5" cy="12" r="2.2"></circle>
+                    <circle cx="12" cy="12" r="2.2"></circle>
+                    <circle cx="19" cy="12" r="2.2"></circle>
+                  </svg>
+                </button>
+                <div class="bubble-popover-menu" id="cam-popover-menu">
+                  <div class="popover-arrow"></div>
+
+                  <!-- Quick Action Buttons Section (Image 2 style) -->
+                  <div class="popover-section-label">THAO TÁC NHANH</div>
+                  <div class="popover-quick-actions">
+                    <button type="button" class="popover-item-btn" id="btn-snapshot" title="Chụp ảnh snapshot">
+                      <span class="popover-item-icon">📷</span>
+                      <span class="popover-item-text">Chụp ảnh snapshot</span>
+                    </button>
+                    <button type="button" class="popover-item-btn" id="btn-fullscreen" title="Toàn màn hình">
+                      <span class="popover-item-icon">⛶</span>
+                      <span class="popover-item-text">Toàn màn hình</span>
+                    </button>
+                    <button type="button" class="popover-item-btn" id="btn-camera-toggle" title="Bật hoặc tạm dừng stream camera">
+                      <span class="popover-item-icon" id="btn-cam-toggle-icon">⏹️</span>
+                      <span class="popover-item-text" id="btn-cam-toggle-txt">DỪNG STREAM</span>
+                    </button>
+                    <button type="button" class="popover-item-btn" id="btn-refresh-stream" title="Tải lại luồng hiển thị nếu bị gián đoạn">
+                      <span class="popover-item-icon">🔄</span>
+                      <span class="popover-item-text">Tải lại luồng</span>
+                    </button>
+                  </div>
+
+                  <div class="popover-divider"></div>
+
+                  <!-- Camera Hardware & Source Configuration Section -->
+                  <div class="camera-controls-header">
+                    <div class="cam-header-title">
+                      <span class="cam-header-icon">⚙️</span>
+                      <h3>CẤU HÌNH NGUỒN CAMERA & ĐỔI THIẾT BỊ</h3>
+                    </div>
+                    <div class="cam-header-badge">
+                      <span class="cam-status-pill" id="cam-active-status-pill">
+                        <span class="pill-dot dot-active"></span>
+                        <span id="cam-active-name-txt">Đang tải...</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Controls Grid -->
+                  <div class="camera-form-grid">
+                    <!-- Cột 1: Chọn loại Camera (Webcam / RTSP / Video) -->
+                    <div class="cam-field-group">
+                      <label for="camera-type-select" class="cam-field-label">
+                        <span>📹 Loại Nguồn:</span>
+                      </label>
+                      <select id="camera-type-select" class="cam-select">
+                        <option value="webcam">📷 Webcam Tích hợp / USB</option>
+                        <option value="rtsp">🌐 Camera IP An Ninh (RTSP)</option>
+                        <option value="video">🎬 Tệp Video Kiểm Thử (MP4)</option>
+                      </select>
+                    </div>
+
+                    <!-- Cột 2A: Thiết bị Webcam (Hiện khi chọn Webcam) -->
+                    <div class="cam-field-group" id="group-webcam-device">
+                      <label for="webcam-device-select" class="cam-field-label">
+                        <span>🔌 Chọn Webcam:</span>
+                      </label>
+                      <div class="cam-input-action-row">
+                        <select id="webcam-device-select" class="cam-select">
+                          <option value="0">Webcam 0 (Mặc định)</option>
+                        </select>
+                        <button type="button" class="btn-cam-action" id="btn-scan-webcams" title="Quét lại các cổng webcam trên máy tính">
+                          🔍 Quét
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Cột 2B: Mẫu Hãng RTSP (Hiện khi chọn RTSP) -->
+                    <div class="cam-field-group" id="group-rtsp-preset" style="display: none;">
+                      <label for="rtsp-preset-select" class="cam-field-label">
+                        <span>🏷️ Mẫu Hãng Camera:</span>
+                      </label>
+                      <select id="rtsp-preset-select" class="cam-select">
+                        <option value="custom">✏️ Tùy chỉnh (Nhập link riêng)</option>
+                        <option value="hikvision">Hikvision (/Streaming/Channels/101)</option>
+                        <option value="dahua">Dahua / Imou (/cam/realmonitor...)</option>
+                        <option value="yoosee">Yoosee (/onvif1)</option>
+                        <option value="tapo">TP-Link Tapo (/stream1)</option>
+                        <option value="ezviz">EZVIZ (/h264/ch1/main/av_stream)</option>
+                      </select>
+                    </div>
+
+                    <!-- Cột 2C: Chọn Video mẫu (Hiện khi chọn Video) -->
+                    <div class="cam-field-group" id="group-video-preset" style="display: none;">
+                      <label for="video-preset-select" class="cam-field-label">
+                        <span>📁 Tệp Video Mẫu:</span>
+                      </label>
+                      <select id="video-preset-select" class="cam-select">
+                        <option value="data/videos/sample_adl_fall.mp4">sample_adl_fall.mp4 (Mô phỏng té ngã)</option>
+                        <option value="synthetic">Synthetic Stream (Video nội bộ giả lập)</option>
+                        <option value="custom">Nhập đường dẫn file MP4...</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Hàng nhập RTSP URL (Chỉ hiện khi chọn RTSP) -->
+                  <div class="cam-full-row" id="group-rtsp-url-row" style="display: none;">
+                    <label for="rtsp-url-input" class="cam-field-label">
+                      <span>🔗 Đường dẫn RTSP Stream (Camera IP):</span>
+                    </label>
+                    <div class="cam-input-wrap">
+                      <input type="text" id="rtsp-url-input" class="cam-input"
+                        placeholder="rtsp://admin:password@192.168.1.100:554/stream" spellcheck="false" autocomplete="off">
+                    </div>
+                    <small class="cam-hint">Gợi ý: Nhập địa chỉ IP, username, password và cổng 554 của camera an ninh trong nhà.</small>
+                  </div>
+
+                  <!-- Hàng nhập custom video path (Chỉ hiện khi chọn Video -> custom) -->
+                  <div class="cam-full-row" id="group-video-custom-row" style="display: none;">
+                    <label for="custom-video-path-input" class="cam-field-label">
+                      <span>📁 Đường dẫn file video cục bộ:</span>
+                    </label>
+                    <input type="text" id="custom-video-path-input" class="cam-input"
+                      placeholder="data/videos/your_test_video.mp4" spellcheck="false">
+                  </div>
+
+                  <!-- Action Buttons Row -->
+                  <div class="cam-buttons-row">
+                    <button type="button" class="btn-cam-primary" id="btn-apply-camera">
+                      <span class="btn-spinner" id="cam-spinner" style="display: none;">⏳</span>
+                      <span id="btn-apply-txt">🔄 ÁP DỤNG & CHUYỂN CAMERA</span>
+                    </button>
+                    <button type="button" class="btn-cam-secondary" id="btn-save-camera-default" title="Lưu thiết lập này vào configs/camera.yaml để lần khởi động sau tự động dùng">
+                      💾 LƯU MẶC ĐỊNH
+                    </button>
+                  </div>
+
+                  <!-- Toast / Feedback message bar -->
+                  <div class="cam-toast-feedback" id="cam-toast-feedback" style="display: none;"></div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -109,34 +245,11 @@
               </div>
             </div>
 
-            <!-- HUD Badges on Top of Video -->
+            <!-- HUD Badges on Top of Video (Độ tương phản cao: Nền đen đặc 100%, Chữ xanh lá Neon sáng rõ) -->
             <div class="video-hud">
-              <div class="hud-item" id="hud-cam-name">CAM 01: WEBCAM</div>
-              <div class="hud-item" id="hud-res">1280x720</div>
+              <div class="hud-item hud-green-badge" id="hud-cam-name" style="background-color: #000000 !important; color: #00ff66 !important; border: 2px solid #00ff66 !important; font-weight: 800 !important; font-size: 12px !important; text-shadow: 0 0 6px rgba(0, 255, 102, 0.8) !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.9), 0 0 12px rgba(0, 255, 102, 0.5) !important;">CAM: WEBCAM 0</div>
+              <div class="hud-item hud-green-badge" id="hud-res" style="background-color: #000000 !important; color: #00ff66 !important; border: 2px solid #00ff66 !important; font-weight: 800 !important; font-size: 12px !important; text-shadow: 0 0 6px rgba(0, 255, 102, 0.8) !important; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.9), 0 0 12px rgba(0, 255, 102, 0.5) !important;">1280x720</div>
               <div class="hud-item hud-unblurred" id="hud-blur-status">MẶT: RÕ NÉT (KHÔNG LÀM MỜ)</div>
-            </div>
-          </div>
-
-          <!-- Camera Stream Controls -->
-          <div class="camera-controls">
-            <div class="ctrl-group">
-              <label for="camera-source-select">Nguồn Video:</label>
-              <select id="camera-source-select" class="form-select">
-                <option value="webcam">Webcam thiết bị (Device 0)</option>
-                <option value="rtsp">Camera IP (RTSP Stream)</option>
-                <option value="video">Tệp Video mẫu (File MP4)</option>
-              </select>
-            </div>
-
-            <div class="ctrl-group rtsp-input-group" id="rtsp-input-group" style="display: none;">
-              <input type="text" id="rtsp-url-input" class="form-input"
-                placeholder="rtsp://admin:pass@192.168.1.100:554/stream">
-            </div>
-
-            <div class="ctrl-buttons">
-              <button class="btn-primary" id="btn-camera-toggle">BẬT CAMERA STREAM</button>
-              <button class="btn-secondary" id="btn-camera-reset">RESET CAMERA</button>
-              <button class="btn-secondary" id="btn-refresh-stream">TẢI LẠI STREAM</button>
             </div>
           </div>
         </div>
@@ -371,6 +484,102 @@
       src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLI7c8s2GLAczk9vywYAsBDCS3PLCgCwEMpLc8sGALAQyktzywYAsBDOS3PLBgCwEM5Lc8sGALAQzktzywYAsBDOS3PLBgCwEM5Lc8sGALAQ="
       type="audio/wav">
   </audio>
+
+  <!-- Modern Settings Modal (Bảng Cài Đặt Hệ Thống Gọn Gàng 1-Click) -->
+  <div class="settings-modal-overlay" id="settings-modal-overlay" style="display: none;">
+    <div class="settings-modal-card" id="settings-modal-card">
+      <div class="settings-modal-header">
+        <div class="modal-title-wrap">
+          <span class="modal-icon">⚙️</span>
+          <h2>CÀI ĐẶT HỆ THỐNG</h2>
+        </div>
+        <button class="btn-close-modal" id="btn-close-settings" title="Đóng cài đặt">✕</button>
+      </div>
+
+      <div class="settings-modal-body">
+        <!-- Mục 1: Khởi động cùng Windows -->
+        <div class="settings-group">
+          <div class="settings-group-header">
+            <div class="settings-group-info">
+              <div class="settings-item-title">
+                <span>🚀 Tự động chạy nền khi mở máy tính</span>
+                <span class="badge-status-pill pill-off" id="autostart-status-pill">Đang tắt</span>
+              </div>
+              <p class="settings-item-desc">
+                Khi bật, AI sẽ tự động khởi động ngầm bảo vệ 24/7 mỗi khi máy tính bật lên mà không làm hiện cửa sổ đen.
+              </p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-autostart">
+              <span class="slider round"></span>
+            </label>
+          </div>
+          <div class="settings-feedback" id="autostart-feedback" style="display: none;"></div>
+        </div>
+
+        <!-- Mục 2: Quyền & Chẩn đoán Camera -->
+        <div class="settings-group">
+          <div class="settings-item-title">
+            <span>🎥 Quyền truy cập & Chẩn đoán Camera</span>
+          </div>
+          <p class="settings-item-desc">
+            Kiểm tra khả năng mở thiết bị camera hoặc mở Cài đặt Quyền Camera của Windows nếu bị chặn.
+          </p>
+          <div class="settings-actions-row">
+            <button class="btn-modal-action" id="btn-check-camera">
+              <span>🔍</span> Kiểm tra Camera
+            </button>
+            <button class="btn-modal-action btn-outline" id="btn-open-win-camera-settings">
+              <span>🔓</span> Mở Cài đặt Quyền Camera Windows
+            </button>
+          </div>
+          <div class="settings-feedback" id="camera-check-feedback" style="display: none;"></div>
+        </div>
+
+        <!-- Mục 3: Chế độ làm mờ khuôn mặt -->
+        <div class="settings-group">
+          <div class="settings-group-header">
+            <div class="settings-group-info">
+              <div class="settings-item-title">
+                <span>🔒 Bảo vệ quyền riêng tư (Làm mờ mặt)</span>
+              </div>
+              <p class="settings-item-desc">
+                Tự động làm mờ khuôn mặt trong khung hình camera để bảo mật hình ảnh người thân.
+              </p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggle-face-blur">
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Mục 4: Điều khiển & Tắt hệ thống -->
+        <div class="settings-group group-danger">
+          <div class="settings-group-header">
+            <div class="settings-group-info">
+              <div class="settings-item-title text-danger">
+                <span>🛑 Dừng hoạt động hệ thống</span>
+              </div>
+              <p class="settings-item-desc">
+                Đóng an toàn tiến trình AI và máy chủ Web kể cả khi đang chạy ẩn dưới nền.
+              </p>
+            </div>
+            <button class="btn-modal-danger" id="btn-modal-shutdown">
+              TẮT HỆ THỐNG
+            </button>
+          </div>
+        </div>
+
+        <!-- Thông tin hệ thống -->
+        <div class="settings-info-box">
+          <div class="info-item"><span>Phiên bản:</span> <strong>Fall & Stroke Warning System v1.0</strong></div>
+          <div class="info-item"><span>Ứng dụng:</span> <strong>Fall_and_Stroke_Warning_System.exe (DirectML)</strong></div>
+          <div class="info-item"><span>Địa chỉ Web:</span> <strong>http://localhost:8000</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

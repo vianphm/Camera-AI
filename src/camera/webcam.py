@@ -37,8 +37,10 @@ class WebcamStream(CameraStream):
             backend = cv2.CAP_V4L2
 
         self._cap = cv2.VideoCapture(self.device_index, backend)
-        # Fallback to ANY if DSHOW fails to open
+        # Fallback to MSMF then ANY if initial backend fails to open
         if (not self._cap or not self._cap.isOpened()) and backend == cv2.CAP_DSHOW:
+            self._cap = cv2.VideoCapture(self.device_index, cv2.CAP_MSMF)
+        if not self._cap or not self._cap.isOpened():
             self._cap = cv2.VideoCapture(self.device_index, cv2.CAP_ANY)
 
         if not self._cap or not self._cap.isOpened():

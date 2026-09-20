@@ -50,7 +50,7 @@ def print_banner() -> None:
     """In banner hệ thống và thông điệp an toàn y tế."""
     banner = """
 ================================================================================
-       ELDERLY AI MONITOR — REAL-TIME VIDEO INTELLIGENCE SYSTEM
+   FALL AND STROKE WARNING SYSTEM — REAL-TIME VIDEO INTELLIGENCE SYSTEM
 ================================================================================
 [*] Core Pipeline:
     Camera -> YOLOv8 Detect -> ByteTrack -> YOLO-Pose -> ST-Transformer
@@ -115,6 +115,20 @@ def initialize_camera_stream(
 
     if source_type == "webcam":
         w_idx = device_index if device_index is not None else camera_cfg.get("webcam", {}).get("device_index", 0)
+        
+        # Kiểm tra quyền và tính khả dụng của Camera trên Windows
+        try:
+            from src.camera.camera_permission import test_camera_access, request_windows_camera_permission_dialog
+            ok, msg, working_devices = test_camera_access(w_idx)
+            if not ok:
+                print(f"  [Cảnh báo Camera] {msg}")
+                request_windows_camera_permission_dialog()
+            elif w_idx not in working_devices and len(working_devices) > 0:
+                print(f"  [Thông báo Camera] Camera {w_idx} bận. Tự động chuyển sang Camera {working_devices[0]}.")
+                w_idx = working_devices[0]
+        except Exception as e:
+            print(f"  [Notice] Bỏ qua kiểm tra quyền camera: {e}")
+
         width = camera_cfg.get("webcam", {}).get("width", 1280)
         height = camera_cfg.get("webcam", {}).get("height", 720)
         fps = camera_cfg.get("webcam", {}).get("fps", 30)
@@ -184,7 +198,7 @@ def initialize_ai_pipeline(blur_faces: bool = False) -> RealtimePipeline:
 
 def main() -> None:
     """HÀM CHÍNH — KHỞI CHẠY TOÀN BỘ HỆ THỐNG."""
-    parser = argparse.ArgumentParser(description="Elderly AI Monitor - Single Master Runner")
+    parser = argparse.ArgumentParser(description="Fall and Stroke Warning System - Single Master Runner")
     parser.add_argument("--source", type=str, choices=["webcam", "rtsp", "video", "multi"], default="webcam", help="Nguồn video đầu vào (webcam, rtsp, video, hoặc multi cho nhiều camera)")
     parser.add_argument("--device-index", type=int, default=0, help="Device index nếu dùng webcam")
     parser.add_argument("--rtsp-url", type=str, default=None, help="RTSP Stream URL")
@@ -248,7 +262,7 @@ def main() -> None:
 
     # Cấu hình hiển thị (Mặc định Web-First: tắt cửa sổ desktop OpenCV trừ khi truyền --gui)
     display_cfg = configs["inference"].get("display", {})
-    window_name = display_cfg.get("window_name", "Elderly AI Monitor - Live HUD Stream")
+    window_name = display_cfg.get("window_name", "Fall and Stroke Warning System - Live HUD Stream")
     show_gui = args.gui and not args.no_gui
 
     # BƯỚC 5: Xử lý chạy đơn camera hoặc đa camera (Multi-Camera Scalability)
@@ -305,6 +319,14 @@ def main() -> None:
             with srv.state_lock:
                 srv.camera_stream = stream
                 srv.is_running = True
+                src_name = f"Webcam {args.device_index}" if args.source == "webcam" else (f"RTSP Stream" if args.source == "rtsp" else "Video File")
+                srv.current_camera_info.update({
+                    "source_type": args.source,
+                    "device_index": args.device_index,
+                    "rtsp_url": args.rtsp_url,
+                    "video_path": args.video_path,
+                    "name": src_name,
+                })
         except Exception:
             pass
 
@@ -317,8 +339,25 @@ def main() -> None:
     print("-" * 80)
 
     try:
-        while stream.is_opened():
-            packet: Optional[FramePacket] = stream.read(timeout=0.5)
+        active_stream = stream
+        while True:
+            # Tham chiếu động tới active stream từ server để hỗ trợ Web UI đổi camera tức thì
+            if not args.no_server:
+                try:
+                    import src.api.server as srv
+                    with srv.state_lock:
+                        if not srv.is_running:
+                            break
+                        if srv.camera_stream is not None:
+                            active_stream = srv.camera_stream
+                except Exception:
+                    pass
+
+            if active_stream is None or not active_stream.is_opened():
+                time.sleep(0.02)
+                continue
+
+            packet: Optional[FramePacket] = active_stream.read(timeout=0.5)
             if packet is None or packet.frame is None:
                 time.sleep(0.002)
                 continue
@@ -374,14 +413,17 @@ def main() -> None:
     finally:
         if decoupled_pipe is not None:
             decoupled_pipe.stop()
-        stream.release()
         if not args.no_server:
             try:
                 import src.api.server as srv
                 with srv.state_lock:
+                    if srv.camera_stream:
+                        srv.camera_stream.release()
                     srv.is_running = False
             except Exception:
                 pass
+        else:
+            stream.release()
         if show_gui:
             cv2.destroyAllWindows()
         print("[Success] Hệ thống đã dừng thành công. Tạm biệt!\n")

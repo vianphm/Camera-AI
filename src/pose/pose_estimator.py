@@ -9,6 +9,8 @@ import numpy as np
 
 from src.tracking.tracker import Track
 from src.pose.keypoints import normalize_keypoints, compute_torso_angle
+from src.utils.config import resolve_model_path
+
 
 try:
     from ultralytics import YOLO
@@ -105,10 +107,21 @@ class YOLOv8PoseEstimator(PoseEstimator):
         half: bool = True,
         img_size: int = 640,
     ) -> None:
-        self.model_path = str(model_path)
+        resolved = resolve_model_path(model_path)
+        self.model_path = str(resolved) if resolved is not None else str(model_path)
         self.conf_threshold = conf_threshold
-        import torch
-        if device == "cuda" and not torch.cuda.is_available():
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            has_cuda = False
+            try:
+                import onnxruntime as ort
+                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+            except ImportError:
+                has_cuda = False
+
+        if device == "cuda" and not has_cuda:
             device = "cpu"
         self.device = device
         self.half = half and (device != "cpu")

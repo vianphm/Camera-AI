@@ -7,8 +7,8 @@ perception:
 
 detector:
   architecture: "yolov8"
-  model_name: "yolov8n.pt"
-  weights_path: "models/detector/yolov8n.pt"
+  model_name: "models/detector/yolov8s.onnx"
+  weights_path: "models/detector/yolov8s.onnx"
   conf_threshold: 0.40
   iou_threshold: 0.50
   target_classes: [0] # 0 = person
@@ -24,9 +24,9 @@ tracker:
   frame_rate: 15
 
 pose:
-  architecture: "yolov8_pose"
-  model_name: "yolov8n-pose.pt"     # Ultralight Nano model (~3.3M params, <600MB VRAM, 3-5ms TensorRT)
-  weights_path: "yolov8n-pose.pt"
+  architecture: "rtmo_s"
+  model_name: "models/pose/rtmo-s.onnx"
+  weights_path: "models/pose/rtmo-s.onnx"
   conf_threshold: 0.35
   num_keypoints: 17
   img_size: 640
@@ -59,7 +59,7 @@ gating:
 
 temporal:
   architecture: "st_transformer"   # st_transformer (Spatial-Temporal Transformer) or tcn
-  weights_path: "models/checkpoints/best_st_transformer.pt"
+  weights_path: "models/checkpoints/best_st_transformer.onnx"
   window_size: 30                  # 30 frames ~ 2.0s at 15 FPS
   stride: 2                        # Sliding window stride S_action = 2
   num_classes: 10
@@ -71,7 +71,7 @@ temporal:
 
 anomaly:
   architecture: "pose_autoencoder"
-  weights_path: "models/checkpoints/best_pose_autoencoder.pt"
+  weights_path: "models/checkpoints/best_pose_autoencoder.onnx"
   window_size: 30
   feature_dim: 51
   latent_dim: 64

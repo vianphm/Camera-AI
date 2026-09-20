@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import pytest
 
-from src.pose.rtmo_estimator import RTMOPoseEstimator
+from src.pose.rtmo_estimator import RTMOPoseEstimator, TRT_AVAILABLE
 from src.tracking.tracker import Track
 
 ENGINE_PATH = Path("models/pose/rtmo-s_int8.engine")
@@ -20,7 +20,7 @@ def test_int8_engine_file_properties():
     assert 20.0 < size_mb < 50.0, f"Expected INT8 engine size ~33MB, got {size_mb:.2f}MB"
 
 
-@pytest.mark.skipif(not ENGINE_PATH.exists(), reason="rtmo-s_int8.engine not found")
+@pytest.mark.skipif(not ENGINE_PATH.exists() or not TRT_AVAILABLE, reason="rtmo-s_int8.engine or TensorRT not available")
 def test_rtmo_int8_initialization():
     """Verify RTMOPoseEstimator initializes correctly with TensorRT INT8 engine."""
     estimator = RTMOPoseEstimator(model_path=ENGINE_PATH)

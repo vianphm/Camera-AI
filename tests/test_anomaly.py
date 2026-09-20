@@ -2,11 +2,18 @@
 
 import numpy as np
 import pytest
-import torch
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    TORCH_AVAILABLE = False
 
 from src.anomaly.anomaly_score import PoseSequenceAutoencoder, ReconstructionAnomalyScorer
 
 
+@pytest.mark.skipif(not TORCH_AVAILABLE, reason="PyTorch not installed in lightweight ONNX runtime")
 def test_pose_autoencoder_reconstruction_shape():
     model = PoseSequenceAutoencoder(input_dim=51, latent_dim=32)
     dummy_x = torch.randn(2, 30, 17, 3)

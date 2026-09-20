@@ -3,6 +3,8 @@
 
 import asyncio
 import json
+import os
+from pathlib import Path
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -21,7 +23,7 @@ from src.utils.config import get_project_root, load_config
 from src.utils.profiler import ResourceMonitor
 
 app = FastAPI(
-    title="Elderly AI Monitor API",
+    title="Fall and Stroke Warning System API",
     description="Real-time Computer Vision & Temporal Behavioral Anomaly Detection API",
     version="1.0.0",
 )
@@ -44,6 +46,26 @@ active_ws_clients: List[WebSocket] = []
 event_logger = EventLogger()
 resource_monitor = ResourceMonitor()
 
+# Uvicorn's actual running event loop, captured at startup so background
+# pipeline threads (which are not the asyncio loop thread) can schedule
+# WebSocket sends onto it via run_coroutine_threadsafe.
+server_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+@app.on_event("startup")
+async def _capture_running_event_loop() -> None:
+    global server_event_loop
+    server_event_loop = asyncio.get_running_loop()
+
+current_camera_info: Dict[str, Any] = {
+    "source_type": "webcam",
+    "device_index": 0,
+    "rtsp_url": None,
+    "video_path": None,
+    "name": "Webcam 0 (Mặc định)",
+    "is_fallback": False,
+}
+
 
 class CameraStartRequest(BaseModel):
     source_type: str = "webcam"  # "webcam", "rtsp", "video"
@@ -52,16 +74,154 @@ class CameraStartRequest(BaseModel):
     video_path: Optional[str] = None
 
 
+class CameraSwitchRequest(BaseModel):
+    source_type: str = "webcam"  # "webcam", "rtsp", "video"
+    device_index: int = 0
+    rtsp_url: Optional[str] = None
+    video_path: Optional[str] = None
+    save_as_default: bool = False
+
+
+def probe_available_webcams(max_probe: int = 4) -> List[Dict[str, Any]]:
+    """Probe and return list of available webcam devices on the system."""
+    devices: List[Dict[str, Any]] = []
+    active_idx = None
+    with state_lock:
+        if current_camera_info.get("source_type") == "webcam":
+            active_idx = current_camera_info.get("device_index", 0)
+
+    for idx in range(max_probe):
+        if idx == active_idx and camera_stream is not None and camera_stream.is_opened():
+            w = int(camera_stream.get_width()) if hasattr(camera_stream, "get_width") else 1280
+            h = int(camera_stream.get_height()) if hasattr(camera_stream, "get_height") else 720
+            devices.append({
+                "device_index": idx,
+                "name": f"Webcam {idx} ({w}x{h} - Đang kết nối)",
+                "resolution": f"{w}x{h}",
+                "is_active": True,
+            })
+            continue
+
+        try:
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+            if cap.isOpened():
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+                devices.append({
+                    "device_index": idx,
+                    "name": f"Webcam {idx} ({w}x{h})" if w > 0 else f"Webcam {idx}",
+                    "resolution": f"{w}x{h}" if w > 0 else "1280x720",
+                    "is_active": False,
+                })
+        except Exception:
+            pass
+
+    if not devices:
+        devices.append({
+            "device_index": 0,
+            "name": "Webcam 0 (Thiết bị mặc định)",
+            "resolution": "1280x720",
+            "is_active": (active_idx == 0),
+        })
+    return devices
+
+
+def save_camera_config_to_yaml(cfg_dict: Dict[str, Any]) -> bool:
+    """Save camera settings to configs/camera.yaml."""
+    try:
+        import yaml
+        yaml_path = get_project_root() / "configs" / "camera.yaml"
+        existing: Dict[str, Any] = {}
+        if yaml_path.exists():
+            with open(yaml_path, "r", encoding="utf-8") as f:
+                existing = yaml.safe_load(f) or {}
+
+        existing["source_type"] = cfg_dict.get("source_type", existing.get("source_type", "webcam"))
+        if "device_index" in cfg_dict:
+            existing.setdefault("webcam", {})["device_index"] = cfg_dict["device_index"]
+        if cfg_dict.get("rtsp_url"):
+            existing.setdefault("rtsp", {})["url"] = cfg_dict["rtsp_url"].strip()
+        if cfg_dict.get("video_path"):
+            existing.setdefault("video", {})["path"] = cfg_dict["video_path"].strip()
+
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.dump(existing, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        return True
+    except Exception as e:
+        print(f"[Error] Cannot save camera.yaml: {e}")
+        return False
+
+
 @app.get("/health")
 def health_check() -> Dict[str, Any]:
     """Check API server health and GPU telemetry."""
     telemetry = resource_monitor.get_telemetry()
     return {
         "status": "healthy",
-        "service": "elderly-ai-monitor",
+        "service": "fall-and-stroke-warning-system",
         "timestamp": time.time(),
         "telemetry": telemetry,
     }
+
+
+@app.post("/api/system/shutdown")
+def shutdown_system() -> Dict[str, Any]:
+    """Graceful shutdown endpoint for background runners and remote stop."""
+    import os, signal, threading
+    def _kill():
+        time.sleep(0.6)
+        os.kill(os.getpid(), signal.SIGTERM)
+    threading.Thread(target=_kill, daemon=True).start()
+    return {"status": "shutting_down", "message": "Hệ thống đang dừng an toàn..."}
+
+
+@app.get("/api/settings/autostart")
+def get_autostart_status() -> Dict[str, Any]:
+    """Check if Windows auto-start on boot is currently enabled."""
+    import os
+    from pathlib import Path
+    appdata = os.getenv("APPDATA", "")
+    shortcut = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "FallAndStrokeWarningSystem.lnk"
+    return {"enabled": shortcut.exists(), "path": str(shortcut)}
+
+
+@app.post("/api/settings/autostart")
+def toggle_autostart(enable: bool = True) -> Dict[str, Any]:
+    """Enable or disable Windows auto-start on boot."""
+    import subprocess
+    root = get_project_root()
+    if enable:
+        vbs_script = root / "scripts" / "cai_dat_startup.vbs"
+        subprocess.run(["cscript.exe", "//nologo", str(vbs_script)], capture_output=True, text=True)
+        return {"enabled": True, "message": "Đã BẬT tự động chạy ngầm mỗi khi mở máy tính!"}
+    else:
+        vbs_script = root / "scripts" / "huy_startup.vbs"
+        subprocess.run(["cscript.exe", "//nologo", str(vbs_script)], capture_output=True, text=True)
+        return {"enabled": False, "message": "Đã TẮT tự động khởi động cùng Windows!"}
+
+
+@app.post("/api/settings/check-camera")
+def check_camera_status() -> Dict[str, Any]:
+    """Test camera access and return list of working cameras."""
+    try:
+        from src.camera.camera_permission import test_camera_access
+        ok, msg, cams = test_camera_access(0)
+        return {"status": ok, "message": msg, "working_devices": cams}
+    except Exception as e:
+        return {"status": False, "message": f"Lỗi kiểm tra camera: {e}", "working_devices": []}
+
+
+@app.post("/api/settings/open-camera-settings")
+def open_windows_camera_settings() -> Dict[str, Any]:
+    """Launch Windows Camera Privacy Settings."""
+    import subprocess
+    try:
+        subprocess.Popen(["cmd", "/c", "start", "ms-settings:privacy-webcam"], shell=True)
+        return {"success": True, "message": "Đã mở Windows Camera Privacy Settings."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
 
 
 @app.get("/status")
@@ -86,74 +246,170 @@ def system_status() -> Dict[str, Any]:
     }
 
 
+@app.get("/camera/devices")
+def get_camera_devices() -> List[Dict[str, Any]]:
+    """Probe and return available webcam devices on the host."""
+    return probe_available_webcams()
+
+
+@app.get("/camera/info")
+def get_camera_info() -> Dict[str, Any]:
+    """Retrieve detailed information about current active camera stream."""
+    with state_lock:
+        active = is_running and camera_stream is not None and camera_stream.is_opened()
+        fps = camera_stream.get_fps() if active and hasattr(camera_stream, "get_fps") else 0.0
+        w = camera_stream.get_width() if active and hasattr(camera_stream, "get_width") else 0
+        h = camera_stream.get_height() if active and hasattr(camera_stream, "get_height") else 0
+        info = dict(current_camera_info)
+        info.update({
+            "is_active": active,
+            "fps": round(fps, 1),
+            "resolution": f"{w}x{h}" if w > 0 and h > 0 else "1280x720",
+        })
+    return info
+
+
+@app.post("/camera/switch")
+def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
+    """Dynamically switch camera source (Webcam, RTSP, Video) without breaking server."""
+    global camera_stream, pipeline_instance, is_running, current_camera_info
+    import re
+
+    # Validate inputs
+    if req.source_type == "rtsp":
+        if not req.rtsp_url or not req.rtsp_url.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Vui lòng nhập đường dẫn RTSP Stream URL hợp lệ (ví dụ: rtsp://admin:pass@192.168.1.100:554/stream)."
+            )
+        req.rtsp_url = req.rtsp_url.strip()
+    elif req.source_type == "video":
+        if not req.video_path or not req.video_path.strip():
+            req.video_path = "data/videos/sample_adl_fall.mp4"
+        req.video_path = req.video_path.strip()
+
+    with state_lock:
+        # Release previous camera stream cleanly
+        if camera_stream is not None:
+            try:
+                camera_stream.release()
+            except Exception as e:
+                print(f"[Warning] Error releasing previous camera: {e}")
+            camera_stream = None
+            time.sleep(0.25)
+
+        new_stream = None
+        friendly_name = ""
+
+        try:
+            if req.source_type == "webcam":
+                cam_cfg = load_config("camera.yaml")
+                api_pref = cam_cfg.get("webcam", {}).get("api_preference", "dshow")
+                new_stream = WebcamStream(device_index=req.device_index, api_preference=api_pref)
+                friendly_name = f"Webcam {req.device_index}"
+            elif req.source_type == "rtsp":
+                new_stream = RTSPStream(url=req.rtsp_url)
+                masked_url = re.sub(r"://([^:]+):([^@]+)@", r"://\1:****@", req.rtsp_url)
+                friendly_name = f"RTSP ({masked_url})"
+            elif req.source_type == "video":
+                new_stream = VideoFileStream(video_path=req.video_path, loop=True)
+                friendly_name = f"Video ({Path(req.video_path).name})"
+            else:
+                raise HTTPException(status_code=400, detail=f"Loại nguồn không hỗ trợ: {req.source_type}")
+
+            success = new_stream.start()
+            if not success:
+                new_stream.release()
+                if req.source_type == "rtsp":
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Không thể kết nối đến Camera RTSP tại '{req.rtsp_url}'. Vui lòng kiểm tra địa chỉ IP, cổng mạng hoặc tài khoản đăng nhập."
+                    )
+                else:
+                    # Fallback to synthetic if hardware webcam fails
+                    from src.camera.synthetic import SyntheticCameraStream
+                    new_stream = SyntheticCameraStream(width=1280, height=720, fps=30)
+                    new_stream.start()
+                    friendly_name += " [Giả lập Synthetic]"
+
+            camera_stream = new_stream
+            current_camera_info.update({
+                "source_type": req.source_type,
+                "device_index": req.device_index,
+                "rtsp_url": req.rtsp_url,
+                "video_path": req.video_path,
+                "name": friendly_name,
+                "is_fallback": "Synthetic" in friendly_name,
+            })
+
+            # Save as default if requested
+            if req.save_as_default:
+                save_camera_config_to_yaml(req.dict())
+
+            # Ensure pipeline is initialized
+            if pipeline_instance is None:
+                try:
+                    from src.pipeline.decoupled_pipeline import DecoupledPipeline
+                    pipeline_instance = DecoupledPipeline(model_name="yolov8n-pose.pt", img_size=480, ai_stride=2)
+                    pipeline_instance.start()
+                except Exception:
+                    pipeline_instance = RealtimePipeline()
+                # Wire the alarm WebSocket broadcast so alerts from this
+                # freshly created pipeline still reach the frontend chime.
+                pipeline_instance.alert_manager.dispatcher.subscribe_websocket(broadcast_alert_event)
+
+            # Ensure background worker is running
+            if not is_running:
+                is_running = True
+                threading.Thread(target=_pipeline_worker_loop, daemon=True, name="PipelineWorker").start()
+
+            res_str = f"{new_stream.get_width()}x{new_stream.get_height()}" if hasattr(new_stream, "get_width") else "1280x720"
+
+            return {
+                "status": "success",
+                "message": f"Đã kết nối thành công với {friendly_name}!",
+                "camera_info": {
+                    "source_type": req.source_type,
+                    "name": friendly_name,
+                    "resolution": res_str,
+                    "fps": round(new_stream.get_fps() if hasattr(new_stream, "get_fps") else 30.0, 1),
+                }
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            from src.camera.synthetic import SyntheticCameraStream
+            fallback = SyntheticCameraStream(width=1280, height=720, fps=30)
+            fallback.start()
+            camera_stream = fallback
+            current_camera_info.update({
+                "source_type": "synthetic",
+                "name": "Synthetic (Dự phòng lỗi)",
+                "is_fallback": True,
+            })
+            raise HTTPException(status_code=500, detail=f"Lỗi khi chuyển đổi camera: {str(e)}")
+
+
+@app.post("/camera/save-config")
+def save_camera_configuration(req: CameraSwitchRequest) -> Dict[str, Any]:
+    """Save the selected camera setup as default in configs/camera.yaml."""
+    success = save_camera_config_to_yaml(req.dict())
+    if success:
+        return {"status": "success", "message": "Đã lưu cấu hình camera mặc định vào configs/camera.yaml"}
+    raise HTTPException(status_code=500, detail="Không thể ghi tệp cấu hình configs/camera.yaml")
+
+
 @app.post("/camera/start")
 def start_camera(req: CameraStartRequest) -> Dict[str, Any]:
     """Start or auto-reset the video ingestion and AI inference pipeline."""
-    global camera_stream, pipeline_instance, is_running
-
-    with state_lock:
-        # If already active, auto-reset to release previous hardware locks
-        if is_running:
-            is_running = False
-            if hasattr(pipeline_instance, "stop"):
-                try:
-                    pipeline_instance.stop()
-                except Exception:
-                    pass
-            if camera_stream:
-                try:
-                    camera_stream.release()
-                except Exception:
-                    pass
-                camera_stream = None
-            time.sleep(0.3)
-
-        # Initialize Camera
-        if req.source_type == "webcam":
-            cam_cfg = load_config("camera.yaml")
-            api_pref = cam_cfg.get("webcam", {}).get("api_preference", "dshow")
-            camera_stream = WebcamStream(device_index=req.device_index, api_preference=api_pref)
-        elif req.source_type == "rtsp":
-            if not req.rtsp_url:
-                raise HTTPException(status_code=400, detail="rtsp_url must be provided for rtsp source_type.")
-            camera_stream = RTSPStream(url=req.rtsp_url)
-        elif req.source_type == "video":
-            if not req.video_path:
-                raise HTTPException(status_code=400, detail="video_path must be provided for video source_type.")
-            camera_stream = VideoFileStream(video_path=req.video_path, loop=True)
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported source_type: {req.source_type}")
-
-        if not camera_stream.start():
-            print("[Notice] Cannot connect camera hardware. Falling back to SyntheticCameraStream.")
-            from src.camera.synthetic import SyntheticCameraStream
-            camera_stream = SyntheticCameraStream(width=1280, height=720, fps=30)
-            camera_stream.start()
-
-        # Initialize Decoupled Pipeline for ultra-smooth 60 FPS rendering
-        try:
-            from src.pipeline.decoupled_pipeline import DecoupledPipeline
-            pipeline_instance = DecoupledPipeline(
-                model_name="yolov8n-pose.pt",
-                img_size=480,
-                ai_stride=2,
-            )
-            pipeline_instance.start()
-        except Exception as e:
-            # Fallback to standard RealtimePipeline if needed
-            print(f"[Warning] DecoupledPipeline init error, falling back: {e}")
-            pipeline_instance = RealtimePipeline()
-
-        # Connect alert dispatcher callback to broadcast over WebSocket
-        def on_alert_dispatched(event: AlertEvent):
-            broadcast_alert_event(event)
-
-        pipeline_instance.alert_manager.dispatcher.subscribe_websocket(on_alert_dispatched)
-
-        is_running = True
-        threading.Thread(target=_pipeline_worker_loop, daemon=True, name="PipelineWorker").start()
-
-    return {"status": "started", "source": req.source_type, "mode": "decoupled_60fps"}
+    switch_req = CameraSwitchRequest(
+        source_type=req.source_type,
+        device_index=req.device_index,
+        rtsp_url=req.rtsp_url,
+        video_path=req.video_path,
+    )
+    return switch_camera(switch_req)
 
 
 @app.post("/camera/reset")
@@ -182,6 +438,130 @@ def stop_camera() -> Dict[str, Any]:
             camera_stream = None
 
     return {"status": "stopped"}
+
+
+@app.get("/api/camera/blur")
+def get_face_blur() -> Dict[str, Any]:
+    """Get current face blurring privacy status."""
+    blur = False
+    with state_lock:
+        if pipeline_instance:
+            if hasattr(pipeline_instance, "blur_faces"):
+                blur = bool(pipeline_instance.blur_faces)
+            elif hasattr(pipeline_instance, "pipeline") and hasattr(pipeline_instance.pipeline, "blur_faces"):
+                blur = bool(pipeline_instance.pipeline.blur_faces)
+    return {"status": "ok", "face_blur": blur}
+
+
+@app.post("/api/camera/blur")
+def set_face_blur(enabled: bool = True) -> Dict[str, Any]:
+    """Toggle face blurring privacy mode."""
+    with state_lock:
+        if pipeline_instance:
+            if hasattr(pipeline_instance, "blur_faces"):
+                pipeline_instance.blur_faces = enabled
+            elif hasattr(pipeline_instance, "pipeline") and hasattr(pipeline_instance.pipeline, "blur_faces"):
+                pipeline_instance.pipeline.blur_faces = enabled
+    return {"status": "ok", "face_blur": enabled}
+
+
+def _get_startup_shortcut_path() -> Path:
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "FallAndStrokeWarningSystem.lnk"
+    return Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup" / "FallAndStrokeWarningSystem.lnk"
+
+
+@app.get("/api/settings/autostart")
+def get_autostart_status() -> Dict[str, Any]:
+    """Check if auto-start shortcut exists in Windows Startup folder."""
+    shortcut = _get_startup_shortcut_path()
+    return {"enabled": shortcut.exists()}
+
+
+@app.post("/api/settings/autostart")
+def set_autostart(enable: bool = True) -> Dict[str, Any]:
+    """Create or remove Windows startup shortcut for silent 24/7 surveillance."""
+    import subprocess
+    shortcut = _get_startup_shortcut_path()
+    root_dir = get_project_root()
+    target_exe = root_dir / "Fall_and_Stroke_Warning_System.exe"
+    if not target_exe.exists():
+        target_exe = root_dir / "2_Chay_He_Thong.bat"
+
+    if enable:
+        shortcut.parent.mkdir(parents=True, exist_ok=True)
+        ps_script = (
+            f"$ws = New-Object -ComObject WScript.Shell; "
+            f"$s = $ws.CreateShortcut('{str(shortcut)}'); "
+            f"$s.TargetPath = '{str(target_exe)}'; "
+            f"$s.WorkingDirectory = '{str(root_dir)}'; "
+            f"$s.Description = 'Fall and Stroke Warning System'; "
+            f"$s.Save()"
+        )
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], check=True, timeout=5)
+            return {"enabled": True, "message": "Đã bật tự động chạy ngầm cùng Windows!"}
+        except Exception as e:
+            return {"enabled": False, "message": f"Không thể tạo phím tắt: {e}"}
+    else:
+        if shortcut.exists():
+            try:
+                shortcut.unlink()
+            except Exception as e:
+                return {"enabled": True, "message": f"Không thể xóa phím tắt: {e}"}
+        return {"enabled": False, "message": "Đã tắt tự động chạy ngầm cùng Windows!"}
+
+
+@app.post("/api/settings/check-camera")
+def check_camera_status() -> Dict[str, Any]:
+    """Diagnostics probe to check camera accessibility and permissions."""
+    working: List[int] = []
+    for idx in range(3):
+        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        if cap.isOpened():
+            working.append(idx)
+            cap.release()
+
+    with state_lock:
+        if camera_stream and camera_stream.is_opened():
+            if 0 not in working:
+                working.insert(0, 0)
+
+    if working:
+        return {
+            "status": True,
+            "message": f"Camera hoạt động tốt! Đã tìm thấy {len(working)} thiết bị khả dụng.",
+            "working_devices": working,
+        }
+    else:
+        return {
+            "status": False,
+            "message": "Không thể mở camera. Vui lòng kiểm tra quyền Camera Windows hoặc thiết bị khác đang chiếm dụng.",
+            "working_devices": [],
+        }
+
+
+@app.post("/api/settings/open-camera-settings")
+def open_win_camera_settings() -> Dict[str, Any]:
+    """Launch Windows Privacy & Security camera settings."""
+    import subprocess
+    try:
+        subprocess.Popen(["cmd", "/c", "start", "ms-settings:privacy-webcam"], shell=True)
+        return {"status": "ok", "message": "Đã mở Cài đặt Quyền Camera Windows."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.post("/api/system/shutdown")
+def shutdown_system() -> Dict[str, Any]:
+    """Safely terminate monitoring server process."""
+    def _delayed_exit():
+        time.sleep(0.8)
+        os._exit(0)
+
+    threading.Thread(target=_delayed_exit, daemon=True).start()
+    return {"status": "ok", "message": "Hệ thống đang tắt an toàn..."}
 
 
 def _pipeline_worker_loop() -> None:
@@ -269,22 +649,27 @@ def video_mjpeg_feed():
 
 
 def broadcast_alert_event(event: AlertEvent) -> None:
-    """Send alert JSON to all connected WebSocket clients."""
+    """Send alert JSON to all connected WebSocket clients.
+
+    Called synchronously from the AI pipeline's own thread (not the uvicorn
+    event loop thread), so sends must be scheduled onto the captured
+    `server_event_loop` via run_coroutine_threadsafe rather than relying on
+    asyncio.get_event_loop(), which has no loop bound to that thread and
+    would silently drop the alert.
+    """
     from dataclasses import asdict
     payload = json.dumps(asdict(event))
 
-    loop = None
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        pass
+    loop = server_event_loop
+    if loop is None or not loop.is_running():
+        print("[Warning] Server event loop not ready — alert WebSocket push skipped")
+        return
 
     for ws in list(active_ws_clients):
         try:
-            if loop and loop.is_running():
-                asyncio.run_coroutine_threadsafe(ws.send_text(payload), loop)
-        except Exception:
-            pass
+            asyncio.run_coroutine_threadsafe(ws.send_text(payload), loop)
+        except Exception as e:
+            print(f"[Warning] Failed to schedule alert WebSocket send: {e}")
 
 
 @app.websocket("/ws/alerts")
@@ -308,6 +693,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 frontend_dir = get_project_root() / "frontend"
+if not frontend_dir.exists():
+    internal_frontend = get_project_root() / "_internal" / "frontend"
+    if internal_frontend.exists():
+        frontend_dir = internal_frontend
+
 if frontend_dir.exists():
     app.mount("/static", StaticFiles(directory=str(frontend_dir)), name="static")
 
@@ -325,4 +715,27 @@ if frontend_dir.exists():
     def serve_frontend_js():
         """Serve dashboard controller script."""
         return FileResponse(str(frontend_dir / "app.js"))
+
+    @app.get("/favicon.ico")
+    def serve_frontend_favicon():
+        """Serve browser tab favicon icon."""
+        ico_path = frontend_dir / "favicon.ico"
+        if ico_path.exists():
+            return FileResponse(str(ico_path))
+        return FileResponse(str(frontend_dir / "icon.png"))
+
+    @app.get("/icon.png")
+    def serve_frontend_icon_png():
+        """Serve PNG tab icon."""
+        return FileResponse(str(frontend_dir / "icon.png"))
+
+    @app.get("/logo.png")
+    def serve_frontend_logo_png():
+        """Serve header branding app logo."""
+        return FileResponse(str(frontend_dir / "logo.png"))
+
+    @app.get("/apple-touch-icon.png")
+    def serve_frontend_apple_icon():
+        """Serve apple touch icon."""
+        return FileResponse(str(frontend_dir / "apple-touch-icon.png"))
 

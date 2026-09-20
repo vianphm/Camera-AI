@@ -5,6 +5,8 @@ Provides motion interpolation buffer, One Euro Filter keypoint smoothing, and By
 """
 
 import time
+import logging
+import traceback
 import threading
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
@@ -30,7 +32,10 @@ from src.alerts.alert_manager import AlertManager, AlertEvent
 from src.detection.motion_gater import MotionGater, MotionGateResult
 from src.utils.visualizer import PipelineVisualizer
 from src.utils.profiler import LatencyProfiler, ResourceMonitor
-from src.utils.config import load_config
+from src.utils.config import load_config, resolve_model_path
+
+logger = logging.getLogger(__name__)
+
 
 
 @dataclass
@@ -76,6 +81,27 @@ class SharedRenderState:
             self.ai_fps = ai_fps
             self.last_ai_timestamp = timestamp
 
+    def update(
+        self,
+        active_tracks: Optional[List[Track]] = None,
+        poses_dict: Optional[Dict[int, PoseResult]] = None,
+        assessments: Optional[Dict[int, RiskAssessment]] = None,
+        ai_latency_ms: float = 0.0,
+        ai_fps: float = 0.0,
+        telemetry: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Update telemetry and state safely without erasing existing tracks on throttled frames."""
+        with self.lock:
+            if active_tracks:
+                self.tracks = {t.track_id: t for t in active_tracks}
+            if poses_dict:
+                self.poses = poses_dict
+            if assessments:
+                self.assessments = assessments
+            if ai_fps > 0:
+                self.ai_fps = ai_fps
+
+
     def get_render_data(
         self,
         curr_time: float,
@@ -111,8 +137,18 @@ class DecoupledPipeline:
         model_cfg = load_config("model.yaml")
         infer_cfg = load_config("inference.yaml")
 
-        import torch
-        if device == "cuda" and not torch.cuda.is_available():
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except ImportError:
+            has_cuda = False
+            try:
+                import onnxruntime as ort
+                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+            except ImportError:
+                has_cuda = False
+
+        if device == "cuda" and not has_cuda:
             device = "cpu"
         self.device = device
         self.half = half and (device != "cpu")
@@ -123,18 +159,18 @@ class DecoupledPipeline:
         model_str = str(model_name)
         if model_str.endswith(".engine") or model_str.endswith(".onnx") or arch in ["rtmo_s", "rtmo_pose"]:
             from src.pose.rtmo_estimator import RTMOPoseEstimator
-            actual_path = model_name
-            if not (model_str.endswith(".engine") or model_str.endswith(".onnx")):
-                actual_path = "models/pose/rtmo-s_int8.engine"
+            actual_path = resolve_model_path(model_name)
+            if actual_path is None or not actual_path.exists():
+                actual_path = resolve_model_path("models/pose/rtmo-s.onnx")
             self.pose_estimator = RTMOPoseEstimator(
-                model_path=actual_path,
+                model_path=str(actual_path or model_name),
                 conf_threshold=pose_cfg.get("conf_threshold", 0.35),
                 device=self.device,
-                img_size=(img_size, img_size) if isinstance(img_size, int) else img_size,
+                img_size=(640, 640),
             )
         else:
             self.pose_estimator = YOLOv8PoseEstimator(
-                model_path=model_name,
+                model_path=str(resolve_model_path(model_name) or model_name),
                 conf_threshold=pose_cfg.get("conf_threshold", 0.35),
                 device=self.device,
                 half=self.half,
@@ -249,187 +285,201 @@ class DecoupledPipeline:
     def _ai_worker_loop(self) -> None:
         """Dedicated background loop running Single-Pass AI Inference at 15-20 FPS."""
         while self._running:
-            # Wait for fresh frame
-            self._new_frame_event.wait(timeout=0.1)
-            self._new_frame_event.clear()
+            try:
+                self._run_ai_step()
+            except Exception as e:
+                logger.error(f"[DecoupledPipeline Worker Error]: {traceback.format_exc()}")
+                time.sleep(0.05)
 
-            with self._packet_lock:
-                packet = self._latest_camera_packet
+    def _run_ai_step(self) -> None:
+        """Execute a single perception, tracking, and risk evaluation cycle."""
+        # Wait for fresh frame
+        self._new_frame_event.wait(timeout=0.1)
+        self._new_frame_event.clear()
 
-            if packet is None or packet.frame is None:
-                continue
+        with self._packet_lock:
+            packet = self._latest_camera_packet
 
-            self._ai_frame_count += 1
-            # Subsample frames: e.g. process 1 out of every ai_stride frames
-            if self._ai_frame_count % self.ai_stride != 0:
-                continue
+        if packet is None or packet.frame is None:
+            return
 
-            # 0. Tier-0 Motion Gating
-            has_active = bool(self.tracker.tracks) if hasattr(self.tracker, "tracks") else False
-            gate_res = self.motion_gater.evaluate(packet.frame, has_active_tracks=has_active)
-            if not gate_res.should_run_ai or gate_res.is_throttled_frame:
-                self.shared_state.update(
-                    active_tracks=[],
-                    poses_dict={},
-                    assessments={},
-                    ai_latency_ms=0.0,
-                    ai_fps=self.ai_profiler.fps,
-                    telemetry={
-                        "tier0_status": gate_res.status,
-                        "tier0_motion_ratio": gate_res.motion_ratio,
-                        "tier0_cooldown": gate_res.cooldown_remaining,
-                        "tier0_rationale": gate_res.rationale,
-                        "ai_bypassed": True,
-                    }
+        self._ai_frame_count += 1
+        # Subsample frames: e.g. process 1 out of every ai_stride frames
+        if self._ai_frame_count % self.ai_stride != 0:
+            return
+
+        # 0. Tier-0 Motion Gating
+        has_active = bool(self.tracker._tracks) if hasattr(self.tracker, "_tracks") else (bool(self.tracker.tracks) if hasattr(self.tracker, "tracks") else False)
+        gate_res = self.motion_gater.evaluate(packet.frame, has_active_tracks=has_active)
+        if not gate_res.should_run_ai or gate_res.is_throttled_frame:
+            self.shared_state.update(
+                ai_latency_ms=0.0,
+                ai_fps=self.ai_profiler.fps,
+                telemetry={
+                    "tier0_status": gate_res.status,
+                    "tier0_motion_ratio": gate_res.motion_ratio,
+                    "tier0_cooldown": gate_res.cooldown_remaining,
+                    "tier0_rationale": gate_res.rationale,
+                    "ai_bypassed": True,
+                }
+            )
+            time.sleep(1.0 / self.motion_gater.idle_fps)
+            return
+
+        t_start = time.perf_counter()
+        self.ai_profiler.start_frame()
+
+        # 1. Single-Pass Perception (YOLO-Pose extracts both BBoxes & Skeletons)
+        detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(packet.frame)
+
+
+        # 2. ByteTrack with Fall Protection
+        active_tracks = self.tracker.update(detections, packet.timestamp)
+        active_track_ids = {t.track_id for t in active_tracks}
+        self.sequence_buffer.update_activity(active_track_ids)
+        self.risk_engine.cleanup_inactive(active_track_ids)
+        self.gated_trigger.cleanup_inactive(active_track_ids)
+
+        # Cleanup translation offset buffers for dead tracks
+        dead_tids = [tid for tid in self._prev_raw_keypoints if tid not in active_track_ids]
+        for tid in dead_tids:
+            self._prev_raw_keypoints.pop(tid, None)
+            self._prev_track_bboxes.pop(tid, None)
+            self.keypoint_filters.pop(tid, None)
+
+        # 2.5. Map detections to keypoints using IoU Matching (>= 0.70)
+        matched_kp_map = self.pose_estimator.match_tracks_to_keypoints(
+            active_tracks,
+            single_pass_items,
+            iou_threshold=self.iou_match_thresh,
+        )
+
+        poses_dict: Dict[int, PoseResult] = {}
+        for track in active_tracks:
+            tid = track.track_id
+            curr_bbox = track.bbox
+
+            if tid in matched_kp_map:
+                # Direct match with original YOLO-Pose detection bbox (IoU >= 0.70)
+                raw_kp = matched_kp_map[tid]
+            elif tid in self._prev_raw_keypoints and tid in self._prev_track_bboxes:
+                # Translation offset compensation for skipped frames / partial occlusions:
+                # p_k(t) = p_k(t-1) + (c_bbox(t) - c_bbox(t-1))
+                raw_kp = translate_keypoints(
+                    self._prev_raw_keypoints[tid],
+                    self._prev_track_bboxes[tid],
+                    curr_bbox,
                 )
-                time.sleep(1.0 / self.motion_gater.idle_fps)
-                continue
+            else:
+                raw_kp = None
 
-            t_start = time.perf_counter()
-            self.ai_profiler.start_frame()
+            if raw_kp is not None:
+                # Update translation offset state
+                self._prev_raw_keypoints[tid] = raw_kp.copy()
+                self._prev_track_bboxes[tid] = curr_bbox
 
-            # 1. Single-Pass Perception (YOLO-Pose extracts both BBoxes & Skeletons)
-            detections, single_pass_items = self.pose_estimator.detect_and_estimate_single_pass(packet.frame)
+                # 3. Apply One Euro Filter to remove jitter without phase lag
+                if tid not in self.keypoint_filters:
+                    self.keypoint_filters[tid] = KeypointOneEuroFilter()
+                filtered_kp = self.keypoint_filters[tid].filter(raw_kp, packet.timestamp)
 
+                norm_kp = normalize_keypoints(filtered_kp, bbox_fallback=track.bbox)
+                torso_angle = compute_torso_angle(filtered_kp)
+                mean_conf = float(np.mean(filtered_kp[:, 2]))
 
-            # 2. ByteTrack with Fall Protection
-            active_tracks = self.tracker.update(detections, packet.timestamp)
-            active_track_ids = {t.track_id for t in active_tracks}
-            self.sequence_buffer.update_activity(active_track_ids)
-            self.risk_engine.cleanup_inactive(active_track_ids)
-            self.gated_trigger.cleanup_inactive(active_track_ids)
+                pose_res = PoseResult(
+                    track_id=tid,
+                    keypoints=filtered_kp,
+                    normalized_keypoints=norm_kp,
+                    torso_angle=torso_angle,
+                    confidence=mean_conf,
+                )
+                poses_dict[tid] = pose_res
 
-            # Cleanup translation offset buffers for dead tracks
-            dead_tids = [tid for tid in self._prev_raw_keypoints if tid not in active_track_ids]
-            for tid in dead_tids:
-                self._prev_raw_keypoints.pop(tid, None)
-                self._prev_track_bboxes.pop(tid, None)
-                self.keypoint_filters.pop(tid, None)
+                # Record snapshot into SequenceBuffer
+                snapshot = TrackSnapshot(
+                    timestamp=packet.timestamp,
+                    bbox=track.bbox,
+                    keypoints=filtered_kp,
+                    normalized_keypoints=norm_kp,
+                    torso_angle=torso_angle,
+                )
+                self.sequence_buffer.add_snapshot(tid, snapshot)
 
-            # 2.5. Map detections to keypoints using IoU Matching (>= 0.70)
-            matched_kp_map = self.pose_estimator.match_tracks_to_keypoints(
-                active_tracks,
-                single_pass_items,
-                iou_threshold=self.iou_match_thresh,
-            )
+        # 4. Cascade / Gated Temporal Reasoning & Risk Evaluation
+        assessments: List[RiskAssessment] = []
+        alerts_raised: List[AlertEvent] = []
 
-            poses_dict: Dict[int, PoseResult] = {}
-            for track in active_tracks:
-                tid = track.track_id
-                curr_bbox = track.bbox
+        # Minimum snapshots needed for the Tier-1 kinematic gate to produce a
+        # meaningful velocity/acceleration reading (2 for Vy, 3 for Ay). Waiting
+        # for the full window (sequence_buffer.is_ready(), ~1s of history) before
+        # running ANY gating meant a brand-new or just-reset track_id (which is
+        # exactly what happens when a sudden fall breaks IoU tracking continuity)
+        # went completely unmonitored during the critical first second of a fall.
+        MIN_SNAPSHOTS_FOR_GATING = 3
 
-                if tid in matched_kp_map:
-                    # Direct match with original YOLO-Pose detection bbox (IoU >= 0.70)
-                    raw_kp = matched_kp_map[tid]
-                elif tid in self._prev_raw_keypoints and tid in self._prev_track_bboxes:
-                    # Translation offset compensation for skipped frames / partial occlusions:
-                    # p_k(t) = p_k(t-1) + (c_bbox(t) - c_bbox(t-1))
-                    raw_kp = translate_keypoints(
-                        self._prev_raw_keypoints[tid],
-                        self._prev_track_bboxes[tid],
-                        curr_bbox,
-                    )
-                else:
-                    raw_kp = None
-
-                if raw_kp is not None:
-                    # Update translation offset state
-                    self._prev_raw_keypoints[tid] = raw_kp.copy()
-                    self._prev_track_bboxes[tid] = curr_bbox
-
-                    # 3. Apply One Euro Filter to remove jitter without phase lag
-                    if tid not in self.keypoint_filters:
-                        self.keypoint_filters[tid] = KeypointOneEuroFilter()
-                    filtered_kp = self.keypoint_filters[tid].filter(raw_kp, packet.timestamp)
-
-                    norm_kp = normalize_keypoints(filtered_kp, bbox_fallback=track.bbox)
-                    torso_angle = compute_torso_angle(filtered_kp)
-                    mean_conf = float(np.mean(filtered_kp[:, 2]))
-
-                    pose_res = PoseResult(
-                        track_id=tid,
-                        keypoints=filtered_kp,
-                        normalized_keypoints=norm_kp,
-                        torso_angle=torso_angle,
-                        confidence=mean_conf,
-                    )
-                    poses_dict[tid] = pose_res
-
-                    # Record snapshot into SequenceBuffer
-                    snapshot = TrackSnapshot(
-                        timestamp=packet.timestamp,
-                        bbox=track.bbox,
-                        keypoints=filtered_kp,
-                        normalized_keypoints=norm_kp,
-                        torso_angle=torso_angle,
-                    )
-                    self.sequence_buffer.add_snapshot(tid, snapshot)
-
-            # 4. Cascade / Gated Temporal Reasoning & Risk Evaluation
-            assessments: List[RiskAssessment] = []
-            alerts_raised: List[AlertEvent] = []
-
-            for track in active_tracks:
-                tid = track.track_id
+        for track in active_tracks:
+            tid = track.track_id
+            snapshots_hist = self.sequence_buffer.get_snapshots(tid)
+            if len(snapshots_hist) >= MIN_SNAPSHOTS_FOR_GATING:
                 seq = self.sequence_buffer.get_normalized_sequence(tid)
-                if seq is not None and self.sequence_buffer.is_ready(tid):
-                    snapshots_hist = self.sequence_buffer.get_snapshots(tid)
-                    kinematics = self.feature_extractor.extract(snapshots_hist)
+                kinematics = self.feature_extractor.extract(snapshots_hist)
 
-                    # Retrieve previous assessment state for hysteresis
-                    prev_ass = self.shared_state.assessments.get(tid)
-                    curr_state = prev_ass.state if prev_ass else "NORMAL"
+                # Retrieve previous assessment state for hysteresis
+                prev_ass = self.shared_state.assessments.get(tid)
+                curr_state = prev_ass.state if prev_ass else "NORMAL"
 
-                    # Tier 1: Biomechanical Gating Filter
-                    gate_res = self.gated_trigger.evaluate(
-                        track_id=tid,
-                        snapshots=snapshots_hist,
-                        kinematics=kinematics,
-                        current_state=curr_state,
-                    )
+                # Tier 1: Biomechanical Gating Filter
+                gate_res = self.gated_trigger.evaluate(
+                    track_id=tid,
+                    snapshots=snapshots_hist,
+                    kinematics=kinematics,
+                    current_state=curr_state,
+                )
 
-                    if gate_res.should_run_ai:
-                        # Tier 2: Deep AI Inference (Gate OPEN: Hard fall, slow slide, Z-axis fall, or hold-on timer)
-                        action_pred = self.action_classifier.predict(seq)
-                        if self._ai_frame_count % (self.ai_stride * self.anomaly_interval) == 0:
-                            anomaly_res = self.anomaly_detector.score(seq)
-                        else:
-                            anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
+                if gate_res.should_run_ai:
+                    # Tier 2: Deep AI Inference (Gate OPEN: Hard fall, slow slide, Z-axis fall, or hold-on timer)
+                    action_pred = self.action_classifier.predict(seq)
+                    if self._ai_frame_count % (self.ai_stride * self.anomaly_interval) == 0:
+                        anomaly_res = self.anomaly_detector.score(seq)
                     else:
-                        # Gate CLOSED: Normal walking/standing/sitting (~0 ms compute)
-                        action_pred = gate_res.heuristic_prediction
                         anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
+                else:
+                    # Gate CLOSED: Normal walking/standing/sitting (~0 ms compute)
+                    action_pred = gate_res.heuristic_prediction
+                    anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
 
-                    self.behavior_analyzer.update(tid, action_pred.primary_action, packet.timestamp)
+                self.behavior_analyzer.update(tid, action_pred.primary_action, packet.timestamp)
 
-                    assessment = self.risk_engine.assess(
-                        track_id=tid,
-                        action_pred=action_pred,
-                        anomaly_res=anomaly_res,
-                        kinematics=kinematics,
-                        timestamp=packet.timestamp,
-                    )
-                    assessments.append(assessment)
+                assessment = self.risk_engine.assess(
+                    track_id=tid,
+                    action_pred=action_pred,
+                    anomaly_res=anomaly_res,
+                    kinematics=kinematics,
+                    timestamp=packet.timestamp,
+                )
+                assessments.append(assessment)
 
-                    # Cooldown-deduplicated alert check
-                    alert = self.alert_manager.process_assessment(
-                        assessment=assessment,
-                        frame=packet.frame,
-                        timestamp=packet.timestamp,
-                    )
-                    if alert is not None:
-                        alerts_raised.append(alert)
+                # Cooldown-deduplicated alert check
+                alert = self.alert_manager.process_assessment(
+                    assessment=assessment,
+                    frame=packet.frame,
+                    timestamp=packet.timestamp,
+                )
+                if alert is not None:
+                    alerts_raised.append(alert)
 
-            # Update shared render state atomically
-            ai_fps = self.ai_profiler.fps
-            self.shared_state.update_from_ai(
-                tracks=active_tracks,
-                poses=poses_dict,
-                assessments=assessments,
-                alerts=alerts_raised,
-                ai_fps=ai_fps,
-                timestamp=packet.timestamp,
-            )
+        # Update shared render state atomically
+        ai_fps = self.ai_profiler.fps
+        self.shared_state.update_from_ai(
+            tracks=active_tracks,
+            poses=poses_dict,
+            assessments=assessments,
+            alerts=alerts_raised,
+            ai_fps=ai_fps,
+            timestamp=packet.timestamp,
+        )
+
 
     def render_frame(self, frame: np.ndarray, timestamp: float) -> Tuple[np.ndarray, List[AlertEvent]]:
         """Render Thread (30 - 60 FPS): Instantly renders overlay without blocking on neural inference."""

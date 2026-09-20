@@ -1,4 +1,4 @@
-# Elderly AI Monitor: Real-Time Camera Monitoring & Abnormal Behavior Detection
+# Fall and Stroke Warning System: Real-Time Camera Monitoring & Abnormal Behavior Detection
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x%20(CUDA%2012)-ee4c2c.svg)](https://pytorch.org/)

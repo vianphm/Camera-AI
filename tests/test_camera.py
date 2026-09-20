@@ -19,3 +19,30 @@ def test_video_file_stream_nonexistent():
     assert not stream.start()
     assert not stream.is_opened()
     stream.release()
+
+
+def test_camera_api_endpoints():
+    from fastapi.testclient import TestClient
+    from src.api.server import app
+
+    client = TestClient(app)
+
+    # Test /camera/info
+    res_info = client.get("/camera/info")
+    assert res_info.status_code == 200
+    data_info = res_info.json()
+    assert "source_type" in data_info
+    assert "resolution" in data_info
+
+    # Test /camera/devices
+    res_devices = client.get("/camera/devices")
+    assert res_devices.status_code == 200
+    data_devices = res_devices.json()
+    assert isinstance(data_devices, list)
+    assert len(data_devices) > 0
+    assert "device_index" in data_devices[0]
+
+    # Test /camera/switch validation
+    res_invalid = client.post("/camera/switch", json={"source_type": "rtsp", "rtsp_url": ""})
+    assert res_invalid.status_code == 400
+

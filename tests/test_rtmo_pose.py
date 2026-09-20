@@ -13,7 +13,7 @@ def test_rtmo_initialization():
     """Test session initialization, model existence, and active provider."""
     estimator = RTMOPoseEstimator()
     assert estimator.session is not None, "RTMO session must initialize successfully"
-    assert estimator.active_provider in ("CUDAExecutionProvider", "CPUExecutionProvider")
+    assert estimator.active_provider in ("DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider")
     assert estimator.input_name == "input"
     assert "dets" in estimator.output_names
     assert "keypoints" in estimator.output_names

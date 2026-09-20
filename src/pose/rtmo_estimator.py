@@ -37,6 +37,8 @@ from src.pose.pose_estimator import (
     compute_bbox_iou,
 )
 from src.pose.keypoints import normalize_keypoints, compute_torso_angle
+from src.utils.config import resolve_model_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,8 @@ class RTMOPoseEstimator(PoseEstimator):
         img_size: Tuple[int, int] = (640, 640),
         device: str = "cuda",
         gpu_mem_limit_gb: float = 2.0,
+        half: bool = False,
+        **kwargs: Any,
     ) -> None:
         """Initialize RTMO-s with TensorRT engine or ONNX Runtime InferenceSession.
 
@@ -64,7 +68,8 @@ class RTMOPoseEstimator(PoseEstimator):
             device: 'cuda' or 'cpu'.
             gpu_mem_limit_gb: GPU memory limit in GB for CUDAExecutionProvider.
         """
-        self.model_path = Path(model_path)
+        resolved = resolve_model_path(model_path)
+        self.model_path = resolved if resolved is not None else Path(model_path)
         self.conf_threshold = conf_threshold
         self.img_size = img_size
         self.device = device.lower()
@@ -149,15 +154,18 @@ class RTMOPoseEstimator(PoseEstimator):
         available_providers = ort.get_available_providers()
         providers = []
 
-        if self.device == "cuda" and "CUDAExecutionProvider" in available_providers:
-            cuda_options = {
-                "device_id": 0,
-                "arena_extend_strategy": "kNextPowerOfTwo",
-                "gpu_mem_limit": int(self.gpu_mem_limit_gb * 1024 * 1024 * 1024),
-                "cudnn_conv_algo_search": "EXHAUSTIVE",
-                "do_copy_in_default_stream": True,
-            }
-            providers.append(("CUDAExecutionProvider", cuda_options))
+        if self.device == "cuda":
+            if "DmlExecutionProvider" in available_providers:
+                providers.append("DmlExecutionProvider")
+            elif "CUDAExecutionProvider" in available_providers:
+                cuda_options = {
+                    "device_id": 0,
+                    "arena_extend_strategy": "kNextPowerOfTwo",
+                    "gpu_mem_limit": int(self.gpu_mem_limit_gb * 1024 * 1024 * 1024),
+                    "cudnn_conv_algo_search": "EXHAUSTIVE",
+                    "do_copy_in_default_stream": True,
+                }
+                providers.append(("CUDAExecutionProvider", cuda_options))
 
         # Always add CPUExecutionProvider as fallback
         providers.append("CPUExecutionProvider")
