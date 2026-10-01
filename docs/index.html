@@ -3,214 +3,699 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fall & Stroke Warning System</title>
+  <title>Fall & Stroke Warning System — Hệ Thống Giám Sát & Cảnh Báo An Toàn</title>
+  <meta name="description" content="Hệ thống AI giám sát và phát hiện sớm nguy cơ té ngã, dấu hiệu đột quỵ cho người cao tuổi. Chạy hoàn toàn offline, chính xác và bảo vệ 24/7.">
+  
+  <!-- Google Fonts: Light & Thin Weights (Outfit & Inter 200/300/400) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400&family=Outfit:wght@200;300;400&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="logo.png">
+
   <style>
+    /* ==========================================================================
+       DESIGN SYSTEM: PURE LIGHT THEME & THIN TYPOGRAPHY
+       ========================================================================== */
     :root {
-      --primary: #2563eb;
-      --primary-dark: #1d4ed8;
-      --accent: #f59e0b;
-      --bg: #f8fafc;
+      /* Clean, Radiant Light Colors */
+      --primary: #2563eb;           /* Sapphire Royal Blue */
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --accent-cyan: #0284c7;       /* Sky Blue */
+      --accent: #f59e0b;            /* Warm Amber Glow */
+      
+      --bg-page: #f8fafc;
       --bg-card: #ffffff;
-      --text: #1e293b;
-      --text-muted: #64748b;
-      --border: #e2e8f0;
-      --gradient-start: #1e3a5f;
-      --gradient-end: #2563eb;
+      --bg-surface: #f1f5f9;
+      --border-subtle: rgba(226, 232, 240, 0.95);
+      --border-hover: rgba(59, 130, 246, 0.35);
+
+      /* High-Contrast Soft Dark Text */
+      --text: #0f172a;              /* Slate 900 */
+      --text-secondary: #334155;    /* Slate 700 */
+      --text-muted: #64748b;        /* Slate 500 */
+
+      /* Status Colors */
+      --status-green: #059669;
+      --status-amber: #d97706;
+      --status-red: #dc2626;
+
+      /* Radii */
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --radius-pill: 9999px;
+
+      /* Shadows */
+      --shadow-sm: 0 2px 8px rgba(100, 116, 139, 0.06);
+      --shadow-card: 0 10px 30px -4px rgba(100, 116, 139, 0.08), 0 2px 6px -1px rgba(100, 116, 139, 0.04);
+      --shadow-hover: 0 20px 40px -8px rgba(100, 116, 139, 0.16), 0 4px 12px -2px rgba(100, 116, 139, 0.06);
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) {
-        --bg: #0f172a;
-        --bg-card: #1e293b;
-        --text: #f1f5f9;
-        --text-muted: #94a3b8;
-        --border: #334155;
-        --gradient-start: #0f172a;
-        --gradient-end: #1e40af;
-      }
-    }
-    :root[data-theme="dark"] {
-      --bg: #0f172a;
-      --bg-card: #1e293b;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border: #334155;
-      --gradient-start: #0f172a;
-      --gradient-end: #1e40af;
+    /* Base Reset & Typography */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
+      font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 300; /* Toàn bộ chữ mỏng, thanh thoát */
+      background-color: var(--bg-page);
+      /* Nền sáng rực rỡ, phủ ánh aura pastel êm dịu */
+      background-image: 
+        radial-gradient(at 10% 8%, rgba(224, 231, 255, 0.65) 0px, transparent 48%),
+        radial-gradient(at 90% 12%, rgba(224, 242, 254, 0.7) 0px, transparent 48%),
+        radial-gradient(at 15% 85%, rgba(209, 250, 229, 0.55) 0px, transparent 50%),
+        radial-gradient(at 88% 88%, rgba(253, 242, 248, 0.6) 0px, transparent 50%),
+        linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      background-attachment: fixed;
       color: var(--text);
+      line-height: 1.65;
+      overflow-x: hidden;
+    }
+
+    /* Triệt tiêu bôi đậm trên toàn bộ trang */
+    h1, h2, h3, h4, h5, h6, strong, b, .btn, .stat-item strong, .nav-brand span {
+      font-weight: 300 !important;
+    }
+
+    /* ==========================================================================
+       TOP NAVIGATION BAR
+       ========================================================================== */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 20px -4px rgba(100, 116, 139, 0.06);
+      padding: 0 28px;
+      transition: all 0.3s ease;
+    }
+
+    .nav-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+    }
+
+    .nav-brand {
+      font-size: 1.35rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      transition: transform 0.25s ease;
+    }
+
+    .nav-brand:hover {
+      transform: scale(1.02);
+    }
+
+    .nav-brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .nav-brand:hover img {
+      transform: scale(1.1) rotate(-3deg);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 1.05rem;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      transition: all 0.25s ease;
+      position: relative;
+    }
+
+    .nav-links a:hover {
+      color: var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-1px);
+    }
+
+    /* Language Switcher Button with Spring Hover */
+    .lang-btn {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 8px 16px;
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: var(--text);
+      font-weight: 300 !important;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .lang-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-2px) scale(1.06);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
+    }
+
+    .lang-btn:active {
+      transform: translateY(0) scale(0.96);
+    }
+
+    /* ==========================================================================
+       BUTTON INTERACTION STYLES (HIỆU ỨNG CHUYỂN ĐỘNG KHI DI CHUỘT VÀ BẤM NÚT)
+       ========================================================================== */
+    .btn-group {
+      display: flex;
+      gap: 18px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px 36px;
+      border-radius: var(--radius-md);
+      font-size: 1.15rem;
+      font-weight: 300 !important; /* Chữ mỏng */
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      overflow: hidden;
+      user-select: none;
+      letter-spacing: 0.4px;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                  background 0.25s ease,
+                  border-color 0.25s ease;
+    }
+
+    /* Hiệu ứng dải ánh sáng Shimmer lướt qua khi hover */
+    .btn::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.45),
+        transparent
+      );
+      transform: skewX(-22deg);
+      transition: none;
+      pointer-events: none;
+    }
+
+    .btn:hover::after {
+      left: 140%;
+      transition: left 0.75s ease-in-out;
+    }
+
+    /* NÚT CHÍNH (PRIMARY BUTTON) */
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%);
+      color: #ffffff;
+      box-shadow: 0 8px 24px -2px rgba(37, 99, 235, 0.35);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: 0 16px 36px -4px rgba(37, 99, 235, 0.45), 0 0 20px rgba(2, 132, 199, 0.3);
+      background: linear-gradient(135deg, #1d4ed8 0%, #0369a1 100%);
+    }
+
+    .btn-primary:active {
+      transform: translateY(-1px) scale(0.98);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+    }
+
+    /* NÚT PHỤ (OUTLINE BUTTON) */
+    .btn-outline {
+      background: rgba(255, 255, 255, 0.9);
+      color: var(--text);
+      border: 1.5px solid var(--border-subtle);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-outline:hover {
+      background: #ffffff;
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: 0 12px 28px -4px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-outline:active {
+      transform: translateY(-1px) scale(0.98);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    /* ==========================================================================
+       HERO SECTION (TÔNG MÀU SÁNG, ĐẸP LUNG LINH, DỄ NHÌN)
+       ========================================================================== */
+    .hero {
+      min-height: 92vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 130px 24px 80px;
+      position: relative;
+    }
+
+    .hero-content {
+      max-width: 860px;
+      margin: 0 auto;
+      animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes heroFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(28px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: var(--primary);
+      padding: 8px 22px;
+      border-radius: var(--radius-pill);
+      font-size: 1rem;
+      margin-bottom: 28px;
+      box-shadow: 0 2px 10px rgba(37, 99, 235, 0.08);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .hero-badge:hover {
+      transform: scale(1.04);
+      box-shadow: 0 4px 16px rgba(37, 99, 235, 0.16);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.4rem, 6vw, 3.8rem);
+      font-weight: 200 !important; /* Chữ mỏng sang trọng */
+      line-height: 1.22;
+      letter-spacing: 0.5px;
+      margin-bottom: 22px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e40af 55%, #4f46e5 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero p {
+      font-size: 1.3rem; /* Cỡ chữ to */
+      color: var(--text-secondary);
+      font-weight: 300;
+      margin-bottom: 42px;
+      max-width: 680px;
+      margin-inline: auto;
+      line-height: 1.7;
+    }
+
+    /* Hero Stats Bar */
+    .hero-stats {
+      display: flex;
+      gap: 56px;
+      justify-content: center;
+      margin-top: 56px;
+      padding-top: 38px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: transform 0.25s ease;
+    }
+
+    .stat-item:hover {
+      transform: translateY(-3px);
+    }
+
+    .stat-item strong {
+      font-size: 2rem;
+      color: var(--primary);
+      font-weight: 200 !important;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-item span {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      font-weight: 300;
+    }
+
+    /* ==========================================================================
+       SECTIONS & CARDS (BỐ CỤC CHUYỂN ĐỘNG BẮT MẮT)
+       ========================================================================== */
+    section {
+      padding: 90px 24px;
+    }
+
+    .container {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .section-title h2 {
+      font-size: 2.3rem; /* Cỡ chữ to */
+      font-weight: 200 !important; /* Chữ mỏng */
+      letter-spacing: 0.5px;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    .section-title p {
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      max-width: 660px;
+      margin: 0 auto;
+      font-weight: 300;
+    }
+
+    /* 1. FEATURES GRID */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 28px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 34px 30px;
+      box-shadow: var(--shadow-card);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 0.35s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-hover);
+      border-color: var(--border-hover);
+    }
+
+    .feature-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      background: var(--primary-light);
+      border: 1px solid #bfdbfe;
+      margin-bottom: 10px;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .feature-card:hover .feature-icon {
+      transform: scale(1.15) rotate(-4deg);
+      background: #dbeafe;
+    }
+
+    .feature-card h3 {
+      font-size: 1.35rem; /* Cỡ chữ to */
+      font-weight: 300 !important;
+      color: var(--text);
+      letter-spacing: 0.3px;
+    }
+
+    .feature-card p {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      font-weight: 300;
+    }
+
+    /* 2. HOW IT WORKS (STEPS) */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 26px;
+      counter-reset: step;
+    }
+
+    .step {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 34px 26px;
+      text-align: center;
+      counter-increment: step;
+      box-shadow: var(--shadow-card);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .step:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-hover);
+      border-color: var(--border-hover);
+    }
+
+    .step::before {
+      content: counter(step);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--accent-cyan));
+      color: #ffffff;
+      font-size: 1.4rem;
+      font-weight: 300 !important;
+      margin-bottom: 18px;
+      box-shadow: 0 6px 18px rgba(37, 99, 235, 0.25);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .step:hover::before {
+      transform: scale(1.12) rotate(10deg);
+    }
+
+    .step h3 {
+      font-size: 1.25rem;
+      font-weight: 300 !important;
+      margin-bottom: 10px;
+      color: var(--text);
+    }
+
+    .step p {
+      color: var(--text-muted);
+      font-size: 1rem;
+      font-weight: 300;
       line-height: 1.6;
     }
 
-    /* NAV */
-    nav {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-      background: rgba(255,255,255,0.85);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-      padding: 0 16px;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) nav { background: rgba(15,23,42,0.85); }
-    }
-    :root[data-theme="dark"] nav { background: rgba(15,23,42,0.85); }
-
-    .nav-inner {
-      max-width: 1100px; margin: 0 auto;
-      display: flex; align-items: center; justify-content: space-between;
-      height: 56px;
-    }
-    .nav-brand { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
-    .nav-brand img { width: 28px; height: 28px; border-radius: 6px; }
-    .nav-links { display: flex; gap: 8px; align-items: center; }
-    .nav-links a {
-      text-decoration: none; color: var(--text-muted); font-size: 0.9rem;
-      padding: 6px 12px; border-radius: 6px; transition: all 0.2s;
-    }
-    .nav-links a:hover { color: var(--primary); background: rgba(37,99,235,0.08); }
-    .lang-btn {
-      background: var(--bg-card); border: 1px solid var(--border);
-      padding: 4px 10px; border-radius: 6px; cursor: pointer;
-      font-size: 0.85rem; color: var(--text); font-weight: 600;
-    }
-    .lang-btn:hover { border-color: var(--primary); }
-
-    /* HERO */
-    .hero {
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-      color: #fff; text-align: center; padding: 80px 16px 60px;
-    }
-    .hero-content { max-width: 700px; }
-    .hero-badge {
-      display: inline-block; background: rgba(255,255,255,0.15);
-      padding: 6px 16px; border-radius: 20px; font-size: 0.85rem;
-      margin-bottom: 24px; backdrop-filter: blur(8px);
-    }
-    .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; margin-bottom: 16px; line-height: 1.2; }
-    .hero p { font-size: 1.15rem; opacity: 0.9; margin-bottom: 36px; max-width: 560px; margin-inline: auto; }
-    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-    .btn {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 14px 28px; border-radius: 10px; font-size: 1rem;
-      font-weight: 600; text-decoration: none; transition: all 0.25s;
-      border: none; cursor: pointer;
-    }
-    .btn-primary { background: var(--accent); color: #1e293b; }
-    .btn-primary:hover { background: #d97706; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.4); }
-    .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.1); }
-    .hero-stats {
-      display: flex; gap: 40px; justify-content: center; margin-top: 48px;
-      padding-top: 32px; border-top: 1px solid rgba(255,255,255,0.15);
-    }
-    .stat-item strong { display: block; font-size: 1.6rem; }
-    .stat-item span { font-size: 0.85rem; opacity: 0.75; }
-
-    /* SECTIONS */
-    section { padding: 80px 16px; }
-    .container { max-width: 1100px; margin: 0 auto; }
-    .section-title {
-      text-align: center; margin-bottom: 48px;
-    }
-    .section-title h2 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
-    .section-title p { color: var(--text-muted); font-size: 1.05rem; max-width: 600px; margin: 0 auto; }
-
-    /* FEATURES */
-    .features-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 24px;
-    }
-    .feature-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 14px; padding: 28px;
-      transition: all 0.3s;
-    }
-    .feature-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); border-color: var(--primary); }
-    .feature-icon {
-      width: 48px; height: 48px; border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; margin-bottom: 16px;
-      background: rgba(37,99,235,0.1);
-    }
-    .feature-card h3 { font-size: 1.15rem; margin-bottom: 8px; }
-    .feature-card p { color: var(--text-muted); font-size: 0.95rem; }
-
-    /* HOW IT WORKS */
-    .steps {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 24px; counter-reset: step;
-    }
-    .step {
-      text-align: center; padding: 24px;
-      counter-increment: step;
-    }
-    .step::before {
-      content: counter(step);
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 48px; height: 48px; border-radius: 50%;
-      background: var(--primary); color: #fff;
-      font-size: 1.3rem; font-weight: 700; margin-bottom: 16px;
-    }
-    .step h3 { margin-bottom: 8px; }
-    .step p { color: var(--text-muted); font-size: 0.9rem; }
-
-    /* REQUIREMENTS */
+    /* 3. REQUIREMENTS GRID */
     .req-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 22px;
     }
+
     .req-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 12px; padding: 20px;
-      display: flex; align-items: flex-start; gap: 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
-    .req-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 2px; }
-    .req-card h4 { font-size: 0.95rem; margin-bottom: 4px; }
-    .req-card p { color: var(--text-muted); font-size: 0.85rem; }
 
-    /* CTA */
+    .req-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-card);
+      border-color: var(--border-hover);
+    }
+
+    .req-icon {
+      font-size: 1.8rem;
+      flex-shrink: 0;
+      transition: transform 0.25s ease;
+    }
+
+    .req-card:hover .req-icon {
+      transform: scale(1.15);
+    }
+
+    .req-card h4 {
+      font-size: 1.1rem;
+      font-weight: 300 !important;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .req-card p {
+      color: var(--text-muted);
+      font-size: 0.98rem;
+      font-weight: 300;
+    }
+
+    /* ==========================================================================
+       CALL TO ACTION (CTA) SECTION (KHUNG SÁNG SANG TRỌNG)
+       ========================================================================== */
     .cta {
-      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-      color: #fff; text-align: center; border-radius: 20px;
-      padding: 60px 24px; margin: 0 16px;
+      background: linear-gradient(135deg, #eff6ff 0%, #e0f2fe 50%, #fdf2f8 100%);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius-lg);
+      text-align: center;
+      padding: 70px 32px;
+      box-shadow: 0 16px 45px -8px rgba(37, 99, 235, 0.14);
+      position: relative;
+      overflow: hidden;
     }
-    .cta h2 { font-size: 1.8rem; margin-bottom: 12px; }
-    .cta p { opacity: 0.85; margin-bottom: 28px; max-width: 500px; margin-inline: auto; }
 
-    /* FOOTER */
-    footer {
-      text-align: center; padding: 32px 16px;
-      color: var(--text-muted); font-size: 0.85rem;
-      border-top: 1px solid var(--border);
+    .cta h2 {
+      font-size: 2.3rem; /* Cỡ chữ to */
+      font-weight: 200 !important; /* Chữ mỏng */
+      color: var(--text);
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
     }
-    footer a { color: var(--primary); text-decoration: none; }
 
-    /* SMARTSCREEN WARNING */
+    .cta p {
+      color: var(--text-secondary);
+      font-size: 1.25rem;
+      font-weight: 300;
+      margin-bottom: 36px;
+      max-width: 580px;
+      margin-inline: auto;
+    }
+
+    /* SmartScreen Notice Box */
     .warning-box {
-      background: #fef3c7; border: 1px solid #f59e0b; border-radius: 12px;
-      padding: 20px 24px; margin-top: 32px; max-width: 640px; margin-inline: auto;
-      color: #92400e; font-size: 0.9rem; text-align: left;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius-md);
+      padding: 22px 28px;
+      margin-top: 36px;
+      max-width: 680px;
+      margin-inline: auto;
+      color: #92400e;
+      font-size: 1rem;
+      text-align: left;
+      line-height: 1.6;
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.08);
+      transition: transform 0.25s ease;
     }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]) .warning-box { background: #422006; border-color: #b45309; color: #fde68a; }
-    }
-    :root[data-theme="dark"] .warning-box { background: #422006; border-color: #b45309; color: #fde68a; }
-    .warning-box strong { display: block; margin-bottom: 4px; }
 
-    /* RESPONSIVE */
-    @media (max-width: 640px) {
-      .hero-stats { flex-direction: column; gap: 16px; }
+    .warning-box:hover {
+      transform: translateY(-2px);
+    }
+
+    .warning-box strong {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 400 !important;
+      color: #78350f;
+    }
+
+    .warning-box b {
+      font-weight: 400 !important;
+      color: #78350f;
+    }
+
+    /* ==========================================================================
+       FOOTER
+       ========================================================================== */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      color: var(--text-muted);
+      font-size: 1rem;
+      border-top: 1px solid var(--border-subtle);
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    footer a:hover {
+      color: var(--primary-hover);
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       RESPONSIVE DESIGN
+       ========================================================================== */
+    @media (max-width: 768px) {
+      nav { padding: 0 16px; }
       .nav-links a.hide-mobile { display: none; }
+      .hero { padding: 110px 16px 60px; }
+      .hero-stats { gap: 24px; flex-direction: column; }
+      .section-title h2 { font-size: 1.9rem; }
+      .cta { padding: 48px 20px; }
+      .btn { padding: 14px 28px; font-size: 1.05rem; width: 100%; }
     }
 
-    /* LANG */
+    /* Multi-language Visibility */
     [data-lang="en"] .vi { display: none; }
     [data-lang="vi"] .en { display: none; }
   </style>
@@ -220,10 +705,10 @@
 <!-- NAV -->
 <nav>
   <div class="nav-inner">
-    <div class="nav-brand">
-      <img src="logo.png" alt="Logo">
+    <a href="#home" class="nav-brand">
+      <img src="logo.png" alt="Fall and Stroke Warning System Logo">
       <span>Fall & Stroke Warning</span>
-    </div>
+    </a>
     <div class="nav-links">
       <a href="#features" class="hide-mobile">
         <span class="vi">Tính năng</span>
@@ -233,11 +718,17 @@
         <span class="vi">Cách dùng</span>
         <span class="en">How it works</span>
       </a>
+      <a href="#requirements" class="hide-mobile">
+        <span class="vi">Yêu cầu</span>
+        <span class="en">Requirements</span>
+      </a>
       <a href="#download">
         <span class="vi">Tải về</span>
         <span class="en">Download</span>
       </a>
-      <button class="lang-btn" onclick="toggleLang()">EN / VI</button>
+      <button class="lang-btn" onclick="toggleLang()" title="Đổi ngôn ngữ Tiếng Việt / English">
+        <span>🌐</span> EN / VI
+      </button>
     </div>
   </div>
 </nav>
@@ -246,6 +737,7 @@
 <section class="hero" id="home">
   <div class="hero-content">
     <div class="hero-badge">
+      <span>✨</span>
       <span class="vi">v0.1.0 — Phiên bản mới nhất</span>
       <span class="en">v0.1.0 — Latest Release</span>
     </div>
@@ -254,35 +746,35 @@
       <span class="en">Fall & Stroke<br>Warning System</span>
     </h1>
     <p>
-      <span class="vi">Giám sát thời gian thực bằng AI, phát hiện sớm các tình huống nguy hiểm cho người cao tuổi. Bảo vệ người thân của bạn 24/7.</span>
-      <span class="en">Real-time AI monitoring that detects dangerous situations for the elderly. Protect your loved ones 24/7.</span>
+      <span class="vi">Giám sát thông minh thời gian thực bằng AI, nhận diện sớm các nguy cơ té ngã và biểu hiện bất thường ở người cao tuổi. Bảo vệ an toàn trọn vẹn 24/7.</span>
+      <span class="en">Intelligent real-time AI monitoring that detects fall risks and abnormal health signs for the elderly. Reliable 24/7 safety protection.</span>
     </p>
     <div class="btn-group">
-      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary" id="download">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary" id="download" title="Tải xuống tệp cài đặt cho Windows">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span class="vi">Tải về miễn phí</span>
         <span class="en">Download Free</span>
       </a>
-      <a href="https://github.com/QuocCuong66/Project-monitoring-model" class="btn btn-outline">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-        GitHub
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model" class="btn btn-outline" target="_blank" rel="noopener noreferrer" title="Xem mã nguồn trên GitHub">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
       </a>
     </div>
     <div class="hero-stats">
       <div class="stat-item">
         <strong>30 FPS</strong>
-        <span class="vi">Thời gian thực</span>
-        <span class="en">Real-time</span>
+        <span class="vi">Thời gian thực (Real-time)</span>
+        <span class="en">Real-time Inference</span>
       </div>
       <div class="stat-item">
-        <strong>AI</strong>
-        <span class="vi">Nhận diện tư thế</span>
-        <span class="en">Pose estimation</span>
+        <strong>YOLO-Pose</strong>
+        <span class="vi">Phân tích tư thế 17 điểm</span>
+        <span class="en">17-Keypoint Pose Estimation</span>
       </div>
       <div class="stat-item">
         <strong>24/7</strong>
-        <span class="vi">Giám sát liên tục</span>
-        <span class="en">Continuous monitoring</span>
+        <span class="vi">Giám sát liên tục không nghỉ</span>
+        <span class="en">Continuous 24/7 Protection</span>
       </div>
     </div>
   </div>
@@ -297,75 +789,80 @@
         <span class="en">Key Features</span>
       </h2>
       <p>
-        <span class="vi">Công nghệ AI tiên tiến giúp phát hiện sớm nguy hiểm</span>
-        <span class="en">Advanced AI technology for early danger detection</span>
+        <span class="vi">Công nghệ thị giác máy tính và học sâu tiên tiến nhất giúp phát hiện sớm nguy cơ chấn thương</span>
+        <span class="en">State-of-the-art computer vision and deep learning for early danger detection</span>
       </p>
     </div>
     <div class="features-grid">
       <div class="feature-card">
-        <div class="feature-icon">&#x1f3af;</div>
+        <div class="feature-icon">🎯</div>
         <h3>
           <span class="vi">Phát hiện ngã tức thì</span>
-          <span class="en">Instant fall detection</span>
+          <span class="en">Instant Fall Detection</span>
         </h3>
         <p>
-          <span class="vi">AI phân tích chuyển động theo thời gian thực, phân biệt ngã thật với các hành động thường ngày như cúi nhặt đồ.</span>
-          <span class="en">AI analyzes motion in real-time, distinguishing real falls from daily activities like bending to pick up items.</span>
+          <span class="vi">AI phân tích chuỗi động học thời gian thực, lọc nhiễu chính xác giữa ngã thật và các hành động cúi người, ngồi xuống nhặt đồ.</span>
+          <span class="en">Temporal kinematic analysis accurately distinguishes actual falls from daily activities like bending down to pick up items.</span>
         </p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">&#x1f9e0;</div>
+        <div class="feature-icon">🧠</div>
         <h3>
           <span class="vi">Nhận diện dấu hiệu đột quỵ</span>
-          <span class="en">Stroke sign recognition</span>
+          <span class="en">Stroke Sign Recognition</span>
         </h3>
         <p>
-          <span class="vi">Phát hiện bất đối xứng khuôn mặt, yếu tay chân và các dấu hiệu bất thường qua phân tích tư thế cơ thể.</span>
-          <span class="en">Detects facial asymmetry, limb weakness and abnormal signs through body pose analysis.</span>
+          <span class="vi">Quan sát tình trạng bất đối xứng tư thế, yếu liệt một bên tay chân và sự mất thăng bằng đột ngột để phát cảnh báo sớm.</span>
+          <span class="en">Identifies posture asymmetry, unilateral limb weakness, and sudden loss of balance for proactive emergency alerts.</span>
         </p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">&#x1f514;</div>
+        <div class="feature-icon">🔔</div>
         <h3>
-          <span class="vi">Cảnh báo âm thanh & hình ảnh</span>
-          <span class="en">Audio & visual alerts</span>
+          <span class="vi">Cảnh báo đa kênh thông minh</span>
+          <span class="en">Multi-Channel Smart Alerts</span>
         </h3>
         <p>
-          <span class="vi">Phát còi cảnh báo và hiển thị thông báo trên giao diện web ngay khi phát hiện tình huống nguy hiểm.</span>
-          <span class="en">Triggers audio alarms and displays notifications on the web dashboard when danger is detected.</span>
+          <span class="vi">Kích hoạt tiếng còi báo động tức thì qua loa máy tính, chớp nháy viền đỏ trực quan trên màn hình và gửi thông báo WebSocket.</span>
+          <span class="en">Triggers instant audio alarms through speakers, flashing visual indicators on screen, and real-time WebSocket feeds.</span>
         </p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">&#x1f4f9;</div>
+        <div class="feature-icon">📹</div>
         <h3>
-          <span class="vi">Theo dõi đa camera</span>
-          <span class="en">Multi-camera support</span>
+          <span class="vi">Hỗ trợ đa dạng Camera</span>
+          <span class="en">Versatile Camera Support</span>
         </h3>
         <p>
-          <span class="vi">Hỗ trợ webcam, camera IP (RTSP) và camera USB. Chuyển đổi camera nhanh qua giao diện web.</span>
-          <span class="en">Supports webcam, IP cameras (RTSP) and USB cameras. Switch cameras instantly via the web dashboard.</span>
+          <span class="vi">Tương thích hoàn toàn với Webcam USB có sẵn, camera IP an ninh (RTSP) gia đình và các tệp video kiểm thử MP4.</span>
+          <span class="en">Fully compatible with standard USB webcams, home security IP cameras (RTSP), and local MP4 test videos.</span>
         </p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">&#x1f465;</div>
+        <div class="feature-icon">👥</div>
         <h3>
           <span class="vi">Theo dõi đa đối tượng</span>
-          <span class="en">Multi-person tracking</span>
+          <span class="en">Multi-Person Tracking</span>
         </h3>
         <p>
-          <span class="vi">Theo dõi đồng thời nhiều người trong cùng khung hình với thuật toán ByteTrack tiên tiến.</span>
-          <span class="en">Simultaneously tracks multiple people in the same frame with advanced ByteTrack algorithm.</span>
+          <span class="vi">Định danh và theo dõi hành trình chuyển động của từng người trong phòng bằng giải thuật ByteTrack hiệu năng cao.</span>
+          <span class="en">Identifies and tracks multiple individuals simultaneously in room environments using the high-speed ByteTrack algorithm.</span>
         </p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">&#x1f310;</div>
+        <div class="feature-icon">🔒</div>
         <h3>
-          <span class="vi">Giao diện web trực quan</span>
-          <span class="en">Intuitive web interface</span>
+          <span class="vi">Bảo mật & riêng tư tuyệt đối</span>
+          <span class="en">Privacy & Offline Security</span>
         </h3>
         <p>
-          <span class="vi">Xem trực tiếp qua trình duyệt, truy cập từ điện thoại hoặc máy tính trong cùng mạng LAN.</span>
-          <span class="en">Watch live via browser, accessible from phone or computer on the same LAN network.</span>
+          <span class="vi">Tất cả dữ liệu xử lý trực tiếp cục bộ (Offline) trên GPU máy bạn, hỗ trợ làm mờ khuôn mặt, không gửi hình ảnh ra máy chủ ngoài.</span>
+          <span class="en">All processing runs entirely on-premise on your local GPU with optional face blurring; no video data is sent to external servers.</span>
         </p>
       </div>
     </div>
@@ -373,53 +870,60 @@
 </section>
 
 <!-- HOW IT WORKS -->
-<section id="how" style="background: var(--bg-card);">
+<section id="how" style="background: rgba(255, 255, 255, 0.65);">
   <div class="container">
     <div class="section-title">
       <h2>
-        <span class="vi">Cách Sử Dụng</span>
+        <span class="vi">Cách Sử Dụng Đơn Giản</span>
         <span class="en">How It Works</span>
       </h2>
+      <p>
+        <span class="vi">Khởi động và bảo vệ người thân chỉ với 4 bước nhanh gọn</span>
+        <span class="en">Start safeguarding your family in just 4 simple steps</span>
+      </p>
     </div>
     <div class="steps">
       <div class="step">
         <h3>
           <span class="vi">Tải & cài đặt</span>
-          <span class="en">Download & install</span>
+          <span class="en">Download & Install</span>
         </h3>
         <p>
-          <span class="vi">Tải file Setup.exe, chạy cài đặt chỉ với vài cú nhấp chuột. Không cần cài Python.</span>
-          <span class="en">Download Setup.exe, install with just a few clicks. No Python required.</span>
+          <span class="vi">Tải tệp cài đặt Setup 1-Click cho Windows, không đòi hỏi cài đặt môi trường lập trình phức tạp.</span>
+          <span class="en">Download the 1-Click Windows Setup package. No manual Python or programming environment required.</span>
         </p>
       </div>
+
       <div class="step">
         <h3>
           <span class="vi">Kết nối camera</span>
-          <span class="en">Connect camera</span>
+          <span class="en">Connect Camera</span>
         </h3>
         <p>
-          <span class="vi">Cắm webcam hoặc nhập địa chỉ camera IP trong file cấu hình.</span>
-          <span class="en">Plug in a webcam or enter your IP camera address in the config file.</span>
+          <span class="vi">Sử dụng webcam laptop sẵn có hoặc chọn camera an ninh IP qua giao diện trực quan.</span>
+          <span class="en">Use your laptop webcam or connect your home IP camera with a single click in the menu.</span>
         </p>
       </div>
+
       <div class="step">
         <h3>
-          <span class="vi">Khởi chạy</span>
-          <span class="en">Launch</span>
+          <span class="vi">Khởi chạy hệ thống</span>
+          <span class="en">Launch AI Engine</span>
         </h3>
         <p>
-          <span class="vi">Mở ứng dụng, hệ thống AI tự động bắt đầu phân tích.</span>
-          <span class="en">Open the app, the AI system starts analyzing automatically.</span>
+          <span class="vi">Nhấp mở ứng dụng, AI tự động kích hoạt nhận diện tăng tốc DirectML / GPU ngay tức khắc.</span>
+          <span class="en">Open the app; AI acceleration automatically engages using DirectML or CUDA.</span>
         </p>
       </div>
+
       <div class="step">
         <h3>
-          <span class="vi">Theo dõi & nhận cảnh báo</span>
-          <span class="en">Monitor & get alerts</span>
+          <span class="vi">Theo dõi & an tâm</span>
+          <span class="en">Monitor & Relax</span>
         </h3>
         <p>
-          <span class="vi">Xem qua trình duyệt tại localhost:8000. Nhận cảnh báo tức thì khi có nguy hiểm.</span>
-          <span class="en">View via browser at localhost:8000. Get instant alerts when danger is detected.</span>
+          <span class="vi">Xem màn hình điều khiển tại localhost:8000. Hệ thống sẽ phát chuông cảnh báo khi có sự cố.</span>
+          <span class="en">View live dashboard at localhost:8000. The system alerts you immediately if any danger occurs.</span>
         </p>
       </div>
     </div>
@@ -431,76 +935,85 @@
   <div class="container">
     <div class="section-title">
       <h2>
-        <span class="vi">Yêu Cầu Hệ Thống</span>
+        <span class="vi">Yêu Cầu Phần Cứng Khuyến Nghị</span>
         <span class="en">System Requirements</span>
       </h2>
+      <p>
+        <span class="vi">Tối ưu hóa chạy mượt mà trên các máy tính và laptop thông dụng hiện nay</span>
+        <span class="en">Optimized for high performance on popular modern PCs and laptops</span>
+      </p>
     </div>
     <div class="req-grid">
       <div class="req-card">
-        <div class="req-icon">&#x1f4bb;</div>
+        <div class="req-icon">💻</div>
         <div>
           <h4>
             <span class="vi">Hệ điều hành</span>
             <span class="en">Operating System</span>
           </h4>
-          <p>Windows 10/11 (64-bit)</p>
+          <p>Windows 10 / Windows 11 (64-bit)</p>
         </div>
       </div>
+
       <div class="req-card">
-        <div class="req-icon">&#x2699;&#xfe0f;</div>
+        <div class="req-icon">⚡</div>
         <div>
           <h4>CPU</h4>
           <p>
-            <span class="vi">Intel i5 thế hệ 8+ hoặc AMD Ryzen 5+</span>
-            <span class="en">Intel i5 8th gen+ or AMD Ryzen 5+</span>
+            <span class="vi">Intel Core i5 thế hệ 8+ hoặc AMD Ryzen 5+</span>
+            <span class="en">Intel Core i5 8th Gen+ or AMD Ryzen 5+</span>
           </p>
         </div>
       </div>
+
       <div class="req-card">
-        <div class="req-icon">&#x1f3ae;</div>
+        <div class="req-icon">🎮</div>
         <div>
           <h4>GPU</h4>
           <p>
-            <span class="vi">NVIDIA GTX 1650+ hoặc AMD RX 570+ (hỗ trợ DirectML)</span>
-            <span class="en">NVIDIA GTX 1650+ or AMD RX 570+ (DirectML supported)</span>
+            <span class="vi">NVIDIA GTX 1650 / RTX hoặc AMD Radeon (DirectML)</span>
+            <span class="en">NVIDIA GTX 1650 / RTX or AMD Radeon (DirectML)</span>
           </p>
         </div>
       </div>
+
       <div class="req-card">
-        <div class="req-icon">&#x1f4be;</div>
+        <div class="req-icon">💾</div>
         <div>
           <h4>RAM</h4>
           <p>
-            <span class="vi">Tối thiểu 8 GB, khuyến nghị 16 GB</span>
-            <span class="en">Minimum 8 GB, recommended 16 GB</span>
+            <span class="vi">Tối thiểu 8 GB (Khuyến nghị 16 GB)</span>
+            <span class="en">Minimum 8 GB (16 GB Recommended)</span>
           </p>
         </div>
       </div>
+
       <div class="req-card">
-        <div class="req-icon">&#x1f4f7;</div>
+        <div class="req-icon">📷</div>
         <div>
           <h4>Camera</h4>
           <p>
-            <span class="vi">Webcam USB hoặc camera IP (RTSP)</span>
-            <span class="en">USB webcam or IP camera (RTSP)</span>
+            <span class="vi">Webcam tích hợp hoặc Camera an ninh IP (RTSP)</span>
+            <span class="en">Integrated Webcam or IP Security Camera (RTSP)</span>
           </p>
         </div>
       </div>
+
       <div class="req-card">
-        <div class="req-icon">&#x1f4e6;</div>
+        <div class="req-icon">📦</div>
         <div>
           <h4>
-            <span class="vi">Dung lượng</span>
-            <span class="en">Disk Space</span>
+            <span class="vi">Dung lượng ổ cứng</span>
+            <span class="en">Storage Space</span>
           </h4>
-          <p>~400 MB</p>
+          <p>~450 MB trống</p>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- CTA -->
+<!-- CALL TO ACTION SECTION -->
 <section>
   <div class="container">
     <div class="cta">
@@ -509,21 +1022,23 @@
         <span class="en">Protect Your Loved Ones Today</span>
       </h2>
       <p>
-        <span class="vi">Miễn phí, dễ cài đặt, chạy hoàn toàn offline trên máy tính của bạn.</span>
-        <span class="en">Free, easy to install, runs completely offline on your computer.</span>
+        <span class="vi">Miễn phí, cài đặt 1-Click nhanh chóng, hoạt động độc lập không cần Internet.</span>
+        <span class="en">Free, instant 1-Click setup, runs 100% offline without needing Internet.</span>
       </p>
-      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span class="vi">Tải về miễn phí</span>
-        <span class="en">Download Free</span>
-      </a>
-      <div class="warning-box" style="margin-top:24px;">
+      <div class="btn-group">
+        <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary" title="Tải xuống tệp cài đặt cho Windows">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span class="vi">Tải về bản cài đặt</span>
+          <span class="en">Download Installer</span>
+        </a>
+      </div>
+      <div class="warning-box">
         <strong>
-          <span class="vi">&#x26a0;&#xfe0f; Lưu ý khi cài đặt lần đầu:</span>
-          <span class="en">&#x26a0;&#xfe0f; Note on first installation:</span>
+          <span class="vi">⚠️ Lưu ý khi cài đặt lần đầu trên Windows:</span>
+          <span class="en">⚠️ Note for First-Time Installation:</span>
         </strong>
-        <span class="vi">Windows SmartScreen có thể hiện cảnh báo vì ứng dụng chưa có chữ ký số. Nhấn <b>"More info"</b> → <b>"Run anyway"</b> để tiếp tục cài đặt.</span>
-        <span class="en">Windows SmartScreen may show a warning because the app is not digitally signed. Click <b>"More info"</b> → <b>"Run anyway"</b> to continue installation.</span>
+        <span class="vi">Do phần mềm mã nguồn mở cá nhân chưa mua chứng chỉ số doanh nghiệp đắt tiền, Windows SmartScreen có thể hiện thông báo màu xanh. Bạn chỉ cần nhấn <b>"More info"</b> (Xem thêm) → chọn <b>"Run anyway"</b> (Vẫn chạy) để tiếp tục cài đặt an toàn.</span>
+        <span class="en">Because this open-source application does not use an expensive corporate code-signing certificate, Windows SmartScreen may display an alert. Simply click <b>"More info"</b> → <b>"Run anyway"</b> to install safely.</span>
       </div>
     </div>
   </div>
@@ -532,11 +1047,12 @@
 <!-- FOOTER -->
 <footer>
   <p>
-    <span class="vi">&copy; 2024–2026 Quốc Cường. Phát triển tại Việt Nam.</span>
-    <span class="en">&copy; 2024–2026 Quốc Cường. Made in Vietnam.</span>
+    <span class="vi">&copy; 2024–2026 Quốc Cường. Phát triển bằng tất cả tâm huyết vì sự an toàn của người cao tuổi.</span>
+    <span class="en">&copy; 2024–2026 Quoc Cuong. Crafted with care for elderly safety and well-being.</span>
   </p>
-  <p style="margin-top:8px;">
-    <a href="https://github.com/QuocCuong66/Project-monitoring-model">GitHub</a>
+  <p style="margin-top:10px;">
+    <a href="https://github.com/QuocCuong66/Project-monitoring-model" target="_blank" rel="noopener noreferrer">Mã nguồn GitHub Project</a> &bull; 
+    <a href="http://localhost:8000" target="_blank" rel="noopener noreferrer">Mở Web Dashboard</a>
   </p>
 </footer>
 
