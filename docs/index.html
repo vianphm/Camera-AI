@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fall & Stroke Warning System</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --accent: #f59e0b;
+      --bg: #f8fafc;
+      --bg-card: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --gradient-start: #1e3a5f;
+      --gradient-end: #2563eb;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0f172a;
+        --bg-card: #1e293b;
+        --text: #f1f5f9;
+        --text-muted: #94a3b8;
+        --border: #334155;
+        --gradient-start: #0f172a;
+        --gradient-end: #1e40af;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --gradient-start: #0f172a;
+      --gradient-end: #1e40af;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) nav { background: rgba(15,23,42,0.85); }
+    }
+    :root[data-theme="dark"] nav { background: rgba(15,23,42,0.85); }
+
+    .nav-inner {
+      max-width: 1100px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      height: 56px;
+    }
+    .nav-brand { font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+    .nav-brand img { width: 28px; height: 28px; border-radius: 6px; }
+    .nav-links { display: flex; gap: 8px; align-items: center; }
+    .nav-links a {
+      text-decoration: none; color: var(--text-muted); font-size: 0.9rem;
+      padding: 6px 12px; border-radius: 6px; transition: all 0.2s;
+    }
+    .nav-links a:hover { color: var(--primary); background: rgba(37,99,235,0.08); }
+    .lang-btn {
+      background: var(--bg-card); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer;
+      font-size: 0.85rem; color: var(--text); font-weight: 600;
+    }
+    .lang-btn:hover { border-color: var(--primary); }
+
+    /* HERO */
+    .hero {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: #fff; text-align: center; padding: 80px 16px 60px;
+    }
+    .hero-content { max-width: 700px; }
+    .hero-badge {
+      display: inline-block; background: rgba(255,255,255,0.15);
+      padding: 6px 16px; border-radius: 20px; font-size: 0.85rem;
+      margin-bottom: 24px; backdrop-filter: blur(8px);
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; margin-bottom: 16px; line-height: 1.2; }
+    .hero p { font-size: 1.15rem; opacity: 0.9; margin-bottom: 36px; max-width: 560px; margin-inline: auto; }
+    .btn-group { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 10px; font-size: 1rem;
+      font-weight: 600; text-decoration: none; transition: all 0.25s;
+      border: none; cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #1e293b; }
+    .btn-primary:hover { background: #d97706; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .btn-outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,0.4); }
+    .btn-outline:hover { border-color: #fff; background: rgba(255,255,255,0.1); }
+    .hero-stats {
+      display: flex; gap: 40px; justify-content: center; margin-top: 48px;
+      padding-top: 32px; border-top: 1px solid rgba(255,255,255,0.15);
+    }
+    .stat-item strong { display: block; font-size: 1.6rem; }
+    .stat-item span { font-size: 0.85rem; opacity: 0.75; }
+
+    /* SECTIONS */
+    section { padding: 80px 16px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    .section-title {
+      text-align: center; margin-bottom: 48px;
+    }
+    .section-title h2 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
+    .section-title p { color: var(--text-muted); font-size: 1.05rem; max-width: 600px; margin: 0 auto; }
+
+    /* FEATURES */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 28px;
+      transition: all 0.3s;
+    }
+    .feature-card:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.08); border-color: var(--primary); }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; margin-bottom: 16px;
+      background: rgba(37,99,235,0.1);
+    }
+    .feature-card h3 { font-size: 1.15rem; margin-bottom: 8px; }
+    .feature-card p { color: var(--text-muted); font-size: 0.95rem; }
+
+    /* HOW IT WORKS */
+    .steps {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 24px; counter-reset: step;
+    }
+    .step {
+      text-align: center; padding: 24px;
+      counter-increment: step;
+    }
+    .step::before {
+      content: counter(step);
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      font-size: 1.3rem; font-weight: 700; margin-bottom: 16px;
+    }
+    .step h3 { margin-bottom: 8px; }
+    .step p { color: var(--text-muted); font-size: 0.9rem; }
+
+    /* REQUIREMENTS */
+    .req-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    .req-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px;
+      display: flex; align-items: flex-start; gap: 14px;
+    }
+    .req-icon { font-size: 1.5rem; flex-shrink: 0; margin-top: 2px; }
+    .req-card h4 { font-size: 0.95rem; margin-bottom: 4px; }
+    .req-card p { color: var(--text-muted); font-size: 0.85rem; }
+
+    /* CTA */
+    .cta {
+      background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+      color: #fff; text-align: center; border-radius: 20px;
+      padding: 60px 24px; margin: 0 16px;
+    }
+    .cta h2 { font-size: 1.8rem; margin-bottom: 12px; }
+    .cta p { opacity: 0.85; margin-bottom: 28px; max-width: 500px; margin-inline: auto; }
+
+    /* FOOTER */
+    footer {
+      text-align: center; padding: 32px 16px;
+      color: var(--text-muted); font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+    footer a { color: var(--primary); text-decoration: none; }
+
+    /* SMARTSCREEN WARNING */
+    .warning-box {
+      background: #fef3c7; border: 1px solid #f59e0b; border-radius: 12px;
+      padding: 20px 24px; margin-top: 32px; max-width: 640px; margin-inline: auto;
+      color: #92400e; font-size: 0.9rem; text-align: left;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .warning-box { background: #422006; border-color: #b45309; color: #fde68a; }
+    }
+    :root[data-theme="dark"] .warning-box { background: #422006; border-color: #b45309; color: #fde68a; }
+    .warning-box strong { display: block; margin-bottom: 4px; }
+
+    /* RESPONSIVE */
+    @media (max-width: 640px) {
+      .hero-stats { flex-direction: column; gap: 16px; }
+      .nav-links a.hide-mobile { display: none; }
+    }
+
+    /* LANG */
+    [data-lang="en"] .vi { display: none; }
+    [data-lang="vi"] .en { display: none; }
+  </style>
+</head>
+<body data-lang="vi">
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <img src="logo.png" alt="Logo">
+      <span>Fall & Stroke Warning</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features" class="hide-mobile">
+        <span class="vi">Tính năng</span>
+        <span class="en">Features</span>
+      </a>
+      <a href="#how" class="hide-mobile">
+        <span class="vi">Cách dùng</span>
+        <span class="en">How it works</span>
+      </a>
+      <a href="#download">
+        <span class="vi">Tải về</span>
+        <span class="en">Download</span>
+      </a>
+      <button class="lang-btn" onclick="toggleLang()">EN / VI</button>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="hero-content">
+    <div class="hero-badge">
+      <span class="vi">v0.1.0 — Phiên bản mới nhất</span>
+      <span class="en">v0.1.0 — Latest Release</span>
+    </div>
+    <h1>
+      <span class="vi">Hệ Thống Cảnh Báo<br>Ngã & Đột Quỵ</span>
+      <span class="en">Fall & Stroke<br>Warning System</span>
+    </h1>
+    <p>
+      <span class="vi">Giám sát thời gian thực bằng AI, phát hiện sớm các tình huống nguy hiểm cho người cao tuổi. Bảo vệ người thân của bạn 24/7.</span>
+      <span class="en">Real-time AI monitoring that detects dangerous situations for the elderly. Protect your loved ones 24/7.</span>
+    </p>
+    <div class="btn-group">
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary" id="download">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="vi">Tải về miễn phí</span>
+        <span class="en">Download Free</span>
+      </a>
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model" class="btn btn-outline">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat-item">
+        <strong>30 FPS</strong>
+        <span class="vi">Thời gian thực</span>
+        <span class="en">Real-time</span>
+      </div>
+      <div class="stat-item">
+        <strong>AI</strong>
+        <span class="vi">Nhận diện tư thế</span>
+        <span class="en">Pose estimation</span>
+      </div>
+      <div class="stat-item">
+        <strong>24/7</strong>
+        <span class="vi">Giám sát liên tục</span>
+        <span class="en">Continuous monitoring</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="container">
+    <div class="section-title">
+      <h2>
+        <span class="vi">Tính Năng Nổi Bật</span>
+        <span class="en">Key Features</span>
+      </h2>
+      <p>
+        <span class="vi">Công nghệ AI tiên tiến giúp phát hiện sớm nguy hiểm</span>
+        <span class="en">Advanced AI technology for early danger detection</span>
+      </p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f3af;</div>
+        <h3>
+          <span class="vi">Phát hiện ngã tức thì</span>
+          <span class="en">Instant fall detection</span>
+        </h3>
+        <p>
+          <span class="vi">AI phân tích chuyển động theo thời gian thực, phân biệt ngã thật với các hành động thường ngày như cúi nhặt đồ.</span>
+          <span class="en">AI analyzes motion in real-time, distinguishing real falls from daily activities like bending to pick up items.</span>
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f9e0;</div>
+        <h3>
+          <span class="vi">Nhận diện dấu hiệu đột quỵ</span>
+          <span class="en">Stroke sign recognition</span>
+        </h3>
+        <p>
+          <span class="vi">Phát hiện bất đối xứng khuôn mặt, yếu tay chân và các dấu hiệu bất thường qua phân tích tư thế cơ thể.</span>
+          <span class="en">Detects facial asymmetry, limb weakness and abnormal signs through body pose analysis.</span>
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f514;</div>
+        <h3>
+          <span class="vi">Cảnh báo âm thanh & hình ảnh</span>
+          <span class="en">Audio & visual alerts</span>
+        </h3>
+        <p>
+          <span class="vi">Phát còi cảnh báo và hiển thị thông báo trên giao diện web ngay khi phát hiện tình huống nguy hiểm.</span>
+          <span class="en">Triggers audio alarms and displays notifications on the web dashboard when danger is detected.</span>
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f4f9;</div>
+        <h3>
+          <span class="vi">Theo dõi đa camera</span>
+          <span class="en">Multi-camera support</span>
+        </h3>
+        <p>
+          <span class="vi">Hỗ trợ webcam, camera IP (RTSP) và camera USB. Chuyển đổi camera nhanh qua giao diện web.</span>
+          <span class="en">Supports webcam, IP cameras (RTSP) and USB cameras. Switch cameras instantly via the web dashboard.</span>
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f465;</div>
+        <h3>
+          <span class="vi">Theo dõi đa đối tượng</span>
+          <span class="en">Multi-person tracking</span>
+        </h3>
+        <p>
+          <span class="vi">Theo dõi đồng thời nhiều người trong cùng khung hình với thuật toán ByteTrack tiên tiến.</span>
+          <span class="en">Simultaneously tracks multiple people in the same frame with advanced ByteTrack algorithm.</span>
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#x1f310;</div>
+        <h3>
+          <span class="vi">Giao diện web trực quan</span>
+          <span class="en">Intuitive web interface</span>
+        </h3>
+        <p>
+          <span class="vi">Xem trực tiếp qua trình duyệt, truy cập từ điện thoại hoặc máy tính trong cùng mạng LAN.</span>
+          <span class="en">Watch live via browser, accessible from phone or computer on the same LAN network.</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="background: var(--bg-card);">
+  <div class="container">
+    <div class="section-title">
+      <h2>
+        <span class="vi">Cách Sử Dụng</span>
+        <span class="en">How It Works</span>
+      </h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <h3>
+          <span class="vi">Tải & cài đặt</span>
+          <span class="en">Download & install</span>
+        </h3>
+        <p>
+          <span class="vi">Tải file Setup.exe, chạy cài đặt chỉ với vài cú nhấp chuột. Không cần cài Python.</span>
+          <span class="en">Download Setup.exe, install with just a few clicks. No Python required.</span>
+        </p>
+      </div>
+      <div class="step">
+        <h3>
+          <span class="vi">Kết nối camera</span>
+          <span class="en">Connect camera</span>
+        </h3>
+        <p>
+          <span class="vi">Cắm webcam hoặc nhập địa chỉ camera IP trong file cấu hình.</span>
+          <span class="en">Plug in a webcam or enter your IP camera address in the config file.</span>
+        </p>
+      </div>
+      <div class="step">
+        <h3>
+          <span class="vi">Khởi chạy</span>
+          <span class="en">Launch</span>
+        </h3>
+        <p>
+          <span class="vi">Mở ứng dụng, hệ thống AI tự động bắt đầu phân tích.</span>
+          <span class="en">Open the app, the AI system starts analyzing automatically.</span>
+        </p>
+      </div>
+      <div class="step">
+        <h3>
+          <span class="vi">Theo dõi & nhận cảnh báo</span>
+          <span class="en">Monitor & get alerts</span>
+        </h3>
+        <p>
+          <span class="vi">Xem qua trình duyệt tại localhost:8000. Nhận cảnh báo tức thì khi có nguy hiểm.</span>
+          <span class="en">View via browser at localhost:8000. Get instant alerts when danger is detected.</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REQUIREMENTS -->
+<section id="requirements">
+  <div class="container">
+    <div class="section-title">
+      <h2>
+        <span class="vi">Yêu Cầu Hệ Thống</span>
+        <span class="en">System Requirements</span>
+      </h2>
+    </div>
+    <div class="req-grid">
+      <div class="req-card">
+        <div class="req-icon">&#x1f4bb;</div>
+        <div>
+          <h4>
+            <span class="vi">Hệ điều hành</span>
+            <span class="en">Operating System</span>
+          </h4>
+          <p>Windows 10/11 (64-bit)</p>
+        </div>
+      </div>
+      <div class="req-card">
+        <div class="req-icon">&#x2699;&#xfe0f;</div>
+        <div>
+          <h4>CPU</h4>
+          <p>
+            <span class="vi">Intel i5 thế hệ 8+ hoặc AMD Ryzen 5+</span>
+            <span class="en">Intel i5 8th gen+ or AMD Ryzen 5+</span>
+          </p>
+        </div>
+      </div>
+      <div class="req-card">
+        <div class="req-icon">&#x1f3ae;</div>
+        <div>
+          <h4>GPU</h4>
+          <p>
+            <span class="vi">NVIDIA GTX 1650+ hoặc AMD RX 570+ (hỗ trợ DirectML)</span>
+            <span class="en">NVIDIA GTX 1650+ or AMD RX 570+ (DirectML supported)</span>
+          </p>
+        </div>
+      </div>
+      <div class="req-card">
+        <div class="req-icon">&#x1f4be;</div>
+        <div>
+          <h4>RAM</h4>
+          <p>
+            <span class="vi">Tối thiểu 8 GB, khuyến nghị 16 GB</span>
+            <span class="en">Minimum 8 GB, recommended 16 GB</span>
+          </p>
+        </div>
+      </div>
+      <div class="req-card">
+        <div class="req-icon">&#x1f4f7;</div>
+        <div>
+          <h4>Camera</h4>
+          <p>
+            <span class="vi">Webcam USB hoặc camera IP (RTSP)</span>
+            <span class="en">USB webcam or IP camera (RTSP)</span>
+          </p>
+        </div>
+      </div>
+      <div class="req-card">
+        <div class="req-icon">&#x1f4e6;</div>
+        <div>
+          <h4>
+            <span class="vi">Dung lượng</span>
+            <span class="en">Disk Space</span>
+          </h4>
+          <p>~400 MB</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section>
+  <div class="container">
+    <div class="cta">
+      <h2>
+        <span class="vi">Bảo Vệ Người Thân Ngay Hôm Nay</span>
+        <span class="en">Protect Your Loved Ones Today</span>
+      </h2>
+      <p>
+        <span class="vi">Miễn phí, dễ cài đặt, chạy hoàn toàn offline trên máy tính của bạn.</span>
+        <span class="en">Free, easy to install, runs completely offline on your computer.</span>
+      </p>
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest" class="btn btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="vi">Tải về miễn phí</span>
+        <span class="en">Download Free</span>
+      </a>
+      <div class="warning-box" style="margin-top:24px;">
+        <strong>
+          <span class="vi">&#x26a0;&#xfe0f; Lưu ý khi cài đặt lần đầu:</span>
+          <span class="en">&#x26a0;&#xfe0f; Note on first installation:</span>
+        </strong>
+        <span class="vi">Windows SmartScreen có thể hiện cảnh báo vì ứng dụng chưa có chữ ký số. Nhấn <b>"More info"</b> → <b>"Run anyway"</b> để tiếp tục cài đặt.</span>
+        <span class="en">Windows SmartScreen may show a warning because the app is not digitally signed. Click <b>"More info"</b> → <b>"Run anyway"</b> to continue installation.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>
+    <span class="vi">&copy; 2024–2026 Quốc Cường. Phát triển tại Việt Nam.</span>
+    <span class="en">&copy; 2024–2026 Quốc Cường. Made in Vietnam.</span>
+  </p>
+  <p style="margin-top:8px;">
+    <a href="https://github.com/QuocCuong66/Project-monitoring-model">GitHub</a>
+  </p>
+</footer>
+
+<script>
+function toggleLang() {
+  const b = document.body;
+  b.dataset.lang = b.dataset.lang === 'vi' ? 'en' : 'vi';
+  try { localStorage.setItem('lang', b.dataset.lang); } catch(e) {}
+}
+try {
+  const saved = localStorage.getItem('lang');
+  if (saved === 'en' || saved === 'vi') document.body.dataset.lang = saved;
+} catch(e) {}
+</script>
+</body>
+</html>
