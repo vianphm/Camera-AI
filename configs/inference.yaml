@@ -8,10 +8,12 @@ runtime:
   num_workers: 2
   target_fps: 30
   sync_mode: false
+  temporal_device: "cuda"  # ST-Transformer & Autoencoder device ("cuda" = DirectML GPU, or "cpu")
 
 scheduling:
   enable_tier0_motion_gating: true # Tier-0 Motion Gating (Bypass AI & throttle to 10-15 FPS when room is static)
-  pose_stride: 2            # Run YOLO-Pose every 2 frames (10-15 FPS). Intermediate frames use Translation Offset
+  pose_stride: 1            # Run single-pass pose + ByteTrack on every camera frame (~30 FPS multi-person tracking)
+  temporal_hz: 15.0         # Fixed sampling rate for temporal AI / risk FSM (models & thresholds are calibrated at 15 Hz)
   action_stride: 2          # Run temporal AI every 2 frames (when Gated Trigger is OPEN)
   enable_gated_ai: true     # Bypass AI on normal walking/standing/sitting
 
@@ -25,6 +27,7 @@ display:
   show_action_label: true
   show_risk_gauge: true
   show_fps_meter: true
+  jpeg_quality: 80         # MJPEG web feed quality (encoded on a background thread)
   show_evidence: true
 
 privacy:

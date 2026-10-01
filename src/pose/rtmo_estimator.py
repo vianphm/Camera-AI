@@ -30,11 +30,11 @@ except ImportError:
 
 from src.detection.detector import Detection
 from src.tracking.tracker import Track
+from src.tracking.track_manager import bbox_iou_matrix
 from src.pose.pose_estimator import (
     PoseEstimator,
     PoseResult,
     SinglePassDetectionItem,
-    compute_bbox_iou,
 )
 from src.pose.keypoints import normalize_keypoints, compute_torso_angle
 from src.utils.config import resolve_model_path
@@ -78,6 +78,12 @@ class RTMOPoseEstimator(PoseEstimator):
         self.active_provider: str = "None"
         self.input_name: str = "input"
         self.output_names: List[str] = ["dets", "keypoints"]
+
+        # Reusable letterbox buffers (see preprocess)
+        self._letterbox_key: Optional[Tuple[int, int]] = None
+        self._letterbox_geom: Tuple[float, int, int, int, int] = (1.0, 0, 0, 0, 0)
+        self._canvas: Optional[np.ndarray] = None
+        self._tensor: Optional[np.ndarray] = None
 
         # TensorRT attributes
         self.is_tensorrt: bool = False
@@ -173,6 +179,9 @@ class RTMOPoseEstimator(PoseEstimator):
         sess_options = ort.SessionOptions()
         sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        if providers and providers[0] == "DmlExecutionProvider":
+            # DirectML does not support memory-pattern optimization (ORT requirement)
+            sess_options.enable_mem_pattern = False
 
         try:
             self.session = ort.InferenceSession(
@@ -212,38 +221,31 @@ class RTMOPoseEstimator(PoseEstimator):
         orig_h, orig_w = image.shape[:2]
         tw, th = self.img_size
 
-        scale_ratio = min(tw / orig_w, th / orig_h)
-        new_unpad_w = int(round(orig_w * scale_ratio))
-        new_unpad_h = int(round(orig_h * scale_ratio))
+        # Letterbox geometry only changes when the input resolution changes; cache it
+        # together with the preallocated canvas/tensor so every frame avoids ~4 MB of
+        # fresh allocations (copyMakeBorder + transpose + astype ≈ 4.4 ms -> ~0.9 ms).
+        if self._letterbox_key != (orig_w, orig_h):
+            scale_ratio = min(tw / orig_w, th / orig_h)
+            new_unpad_w = int(round(orig_w * scale_ratio))
+            new_unpad_h = int(round(orig_h * scale_ratio))
+            pad_h_top = int(round((th - new_unpad_h) / 2.0 - 0.1))
+            pad_w_left = int(round((tw - new_unpad_w) / 2.0 - 0.1))
+            self._letterbox_key = (orig_w, orig_h)
+            self._letterbox_geom = (scale_ratio, new_unpad_w, new_unpad_h, pad_w_left, pad_h_top)
+            self._canvas = np.full((th, tw, 3), 114, dtype=np.uint8)
+            self._tensor = np.empty((1, 3, th, tw), dtype=np.float32)
 
-        dw = (tw - new_unpad_w) / 2.0
-        dh = (th - new_unpad_h) / 2.0
-
+        scale_ratio, new_unpad_w, new_unpad_h, pad_w_left, pad_h_top = self._letterbox_geom
+        roi = self._canvas[pad_h_top:pad_h_top + new_unpad_h, pad_w_left:pad_w_left + new_unpad_w]
         if (orig_w, orig_h) != (new_unpad_w, new_unpad_h):
-            resized = cv2.resize(image, (new_unpad_w, new_unpad_h), interpolation=cv2.INTER_LINEAR)
+            roi[...] = cv2.resize(image, (new_unpad_w, new_unpad_h), interpolation=cv2.INTER_LINEAR)
         else:
-            resized = image
+            roi[...] = image
 
-        pad_h_top = int(round(dh - 0.1))
-        pad_h_bottom = int(round(dh + 0.1))
-        pad_w_left = int(round(dw - 0.1))
-        pad_w_right = int(round(dw + 0.1))
+        # HWC uint8 -> NCHW float32 written into the reused buffer
+        np.copyto(self._tensor[0], self._canvas.transpose(2, 0, 1), casting="unsafe")
 
-        padded = cv2.copyMakeBorder(
-            resized,
-            pad_h_top,
-            pad_h_bottom,
-            pad_w_left,
-            pad_w_right,
-            cv2.BORDER_CONSTANT,
-            value=(114, 114, 114),
-        )
-
-        # Transpose HWC -> CHW, add batch dimension, contiguous float32
-        tensor = padded.transpose(2, 0, 1)[None]
-        tensor = np.ascontiguousarray(tensor, dtype=np.float32)
-
-        return tensor, scale_ratio, float(pad_w_left), float(pad_h_top)
+        return self._tensor, scale_ratio, float(pad_w_left), float(pad_h_top)
 
     def postprocess(
         self,
@@ -430,10 +432,10 @@ class RTMOPoseEstimator(PoseEstimator):
         matched: Dict[int, np.ndarray] = {}
         used_item_indices = set()
 
-        iou_matrix = np.zeros((len(active_tracks), len(items)), dtype=np.float32)
-        for t_idx, track in enumerate(active_tracks):
-            for i_idx, item in enumerate(items):
-                iou_matrix[t_idx, i_idx] = compute_bbox_iou(track.bbox, item.bbox)
+        iou_matrix = bbox_iou_matrix(
+            np.array([t.bbox for t in active_tracks], dtype=np.float32),
+            np.array([it.bbox for it in items], dtype=np.float32),
+        )
 
         flat_indices = np.argsort(-iou_matrix, axis=None)
         for flat_idx in flat_indices:

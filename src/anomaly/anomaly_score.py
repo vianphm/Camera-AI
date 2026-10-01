@@ -140,7 +140,14 @@ class ReconstructionAnomalyScorer(AnomalyDetector):
                 providers = ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
                 available = ort.get_available_providers()
                 actual_providers = [p for p in providers if p in available]
-                self.ort_session = ort.InferenceSession(str(resolved_weights), providers=actual_providers)
+                sess_options = ort.SessionOptions()
+                if actual_providers[0] == "CPUExecutionProvider":
+                    # Tiny sequence model: a single non-spinning thread avoids starving the
+                    # camera, render and RTMO threads (default pool spins on every core).
+                    sess_options.intra_op_num_threads = 1
+                    sess_options.inter_op_num_threads = 1
+                    sess_options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+                self.ort_session = ort.InferenceSession(str(resolved_weights), sess_options=sess_options, providers=actual_providers)
                 self.is_onnx = True
                 self.has_weights = True
             except Exception as e:

@@ -21,6 +21,27 @@ COLOR_WHITE = (255, 255, 255)
 COLOR_DARK_BG = (20, 20, 20)
 
 
+def _blend_rect(
+    frame: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: Tuple[int, int, int],
+    alpha: float,
+) -> None:
+    """Alpha-blend a filled rectangle in place, touching only the ROI (not a full-frame copy)."""
+    h, w = frame.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return
+    roi = frame[y1:y2, x1:x2]
+    solid = np.empty_like(roi)
+    solid[:] = color
+    cv2.addWeighted(solid, alpha, roi, 1.0 - alpha, 0, roi)
+
+
 class PipelineVisualizer:
     """Renders overlays on video frames for real-time monitoring display."""
 
@@ -142,9 +163,7 @@ class PipelineVisualizer:
         """Draw high visibility alert banner on emergency state."""
         h, w = frame.shape[:2]
         banner_h = 44
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (0, 0), (w, banner_h), (0, 0, 180), -1)
-        cv2.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
+        _blend_rect(frame, 0, 0, w, banner_h, (0, 0, 180), 0.85)
 
         msg = f"EMERGENCY ALERT: Possible medical emergency detected (ID:{track_id}, Risk: {risk_score:.2f})!"
         cv2.putText(
@@ -171,9 +190,7 @@ class PipelineVisualizer:
         hud_w, hud_h = 260, 95
         hud_x, hud_y = w - hud_w - 10, 10
 
-        overlay = frame.copy()
-        cv2.rectangle(overlay, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), COLOR_DARK_BG, -1)
-        cv2.addWeighted(overlay, 0.75, frame, 0.25, 0, frame)
+        _blend_rect(frame, hud_x, hud_y, hud_x + hud_w, hud_y + hud_h, COLOR_DARK_BG, 0.75)
         cv2.rectangle(frame, (hud_x, hud_y), (hud_x + hud_w, hud_y + hud_h), (80, 80, 80), 1)
 
         cv2.putText(

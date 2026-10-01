@@ -42,6 +42,7 @@ pipeline_instance: Optional[RealtimePipeline] = None
 camera_stream: Optional[Any] = None
 is_running = False
 latest_annotated_frame: Optional[bytes] = None
+latest_frame_seq = 0  # Incremented on every newly encoded JPEG
 active_ws_clients: List[WebSocket] = []
 event_logger = EventLogger()
 resource_monitor = ResourceMonitor()
@@ -350,7 +351,7 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
             if pipeline_instance is None:
                 try:
                     from src.pipeline.decoupled_pipeline import DecoupledPipeline
-                    pipeline_instance = DecoupledPipeline(model_name="yolov8n-pose.pt", img_size=480, ai_stride=2)
+                    pipeline_instance = DecoupledPipeline(model_name="yolov8n-pose.pt", img_size=480)
                     pipeline_instance.start()
                 except Exception:
                     pipeline_instance = RealtimePipeline()
@@ -581,11 +582,45 @@ def _pipeline_worker_loop() -> None:
             result = pipeline_instance.process_frame(packet.frame, packet.timestamp)
             annotated_frame = result.annotated_frame
 
-        # Encode frame to JPEG for MJPEG browser stream
-        ret, jpeg = cv2.imencode(".jpg", annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        publish_annotated_frame(annotated_frame)
+
+
+# ---------------------------------------------------------------------------
+# Background JPEG encoder: 720p JPEG encoding costs ~15-20 ms, so doing it inline
+# capped the capture/render loop well below camera FPS. Producers now only hand
+# over the newest frame; a single encoder thread (cv2 releases the GIL) encodes
+# whatever is latest and silently drops stale frames.
+# ---------------------------------------------------------------------------
+_encode_cond = threading.Condition()
+_pending_frame: Optional[Any] = None
+_encoder_thread: Optional[threading.Thread] = None
+_jpeg_quality = int(load_config("inference.yaml").get("display", {}).get("jpeg_quality", 80))
+
+
+def publish_annotated_frame(frame: Any) -> None:
+    """Non-blocking: queue the newest annotated BGR frame for the MJPEG web feed."""
+    global _pending_frame, _encoder_thread
+    with _encode_cond:
+        _pending_frame = frame
+        if _encoder_thread is None or not _encoder_thread.is_alive():
+            _encoder_thread = threading.Thread(target=_jpeg_encoder_loop, daemon=True, name="JpegEncoder")
+            _encoder_thread.start()
+        _encode_cond.notify()
+
+
+def _jpeg_encoder_loop() -> None:
+    global _pending_frame, latest_annotated_frame, latest_frame_seq
+    while True:
+        with _encode_cond:
+            while _pending_frame is None:
+                _encode_cond.wait()
+            frame = _pending_frame
+            _pending_frame = None
+        ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, _jpeg_quality])
         if ret:
             with state_lock:
                 latest_annotated_frame = jpeg.tobytes()
+                latest_frame_seq += 1
 
 
 
@@ -621,19 +656,26 @@ def delete_single_event(event_id: str) -> Dict[str, Any]:
 def mjpeg_generator():
     """Generator yielding multipart MJPEG video frames with resilient keepalive."""
     empty_wait = 0
+    last_seq = -1
+    last_sent = 0.0
     while is_running or empty_wait < 50:
         with state_lock:
             frame_bytes = latest_annotated_frame
+            seq = latest_frame_seq
 
-        if frame_bytes is not None:
+        now = time.time()
+        # Send only new frames (no duplicate re-sends); resend ~1/s as keepalive if stalled
+        if frame_bytes is not None and (seq != last_seq or now - last_sent > 1.0):
             empty_wait = 0
+            last_seq = seq
+            last_sent = now
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
             )
-        else:
+        elif frame_bytes is None:
             empty_wait += 1
-        time.sleep(0.02)  # Up to 50 FPS for smooth MJPEG web feed
+        time.sleep(0.008)  # Poll fast enough to forward every frame at 60 FPS
 
 
 @app.get("/stream/mjpeg")

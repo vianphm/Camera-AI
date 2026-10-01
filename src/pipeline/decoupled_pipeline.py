@@ -1,7 +1,9 @@
 """Decoupled Multi-Threaded Real-Time Video Intelligence Pipeline.
 
-Separates Render Thread (30-60 FPS smooth video) from AI Inference Thread (15-20 FPS single-pass pose).
-Provides motion interpolation buffer, One Euro Filter keypoint smoothing, and ByteTrack Fall Protection.
+Separates Render Thread (30-60 FPS smooth video) from AI Inference Thread.
+Perception + multi-object tracking run on every fresh camera frame (pose_stride=1 -> ~30 FPS),
+while temporal reasoning / risk evaluation is sampled at a fixed rate (temporal_hz, default 15 Hz)
+so window sizes, hold-on timers and kinematic thresholds keep their calibrated meaning.
 """
 
 import time
@@ -125,17 +127,22 @@ class DecoupledPipeline:
         img_size: int = 480,
         device: str = "cuda",
         half: bool = True,
-        ai_stride: int = 2,  # AI processes every N camera frames (e.g. 15 FPS from 30 FPS camera)
-        anomaly_interval: int = 5,  # Run heavy Autoencoder every 5 AI frames
+        ai_stride: Optional[int] = None,  # Perception every N camera frames (None -> inference.yaml scheduling.pose_stride)
+        anomaly_interval: int = 5,  # Run heavy Autoencoder every 5 temporal ticks
         action_classifier: Optional[ActionClassifier] = None,
         anomaly_detector: Optional[ReconstructionAnomalyScorer] = None,
     ) -> None:
-        self.ai_stride = ai_stride
         self.anomaly_interval = anomaly_interval
 
         # Load configs
         model_cfg = load_config("model.yaml")
         infer_cfg = load_config("inference.yaml")
+        sched_cfg = infer_cfg.get("scheduling", {})
+        self.ai_stride = max(1, int(ai_stride if ai_stride is not None else sched_cfg.get("pose_stride", 1)))
+        # Temporal/risk reasoning cadence. The temporal models, sequence window (30 frames ~ 2s),
+        # gate hold-on timers and kinematic features are calibrated for 15 Hz sampling.
+        self.temporal_hz = float(sched_cfg.get("temporal_hz", 15.0))
+        self._temporal_period = 1.0 / max(1e-3, self.temporal_hz)
 
         try:
             import torch
@@ -144,7 +151,9 @@ class DecoupledPipeline:
             has_cuda = False
             try:
                 import onnxruntime as ort
-                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+                # onnxruntime-directml exposes the GPU via DirectML, not CUDA
+                gpu_providers = {"CUDAExecutionProvider", "DmlExecutionProvider", "TensorrtExecutionProvider"}
+                has_cuda = bool(gpu_providers.intersection(ort.get_available_providers()))
             except ImportError:
                 has_cuda = False
 
@@ -184,6 +193,7 @@ class DecoupledPipeline:
             track_low_thresh=trk_cfg.get("track_low_thresh", 0.15),
             new_track_thresh=trk_cfg.get("new_track_thresh", 0.60),
             match_thresh=trk_cfg.get("match_thresh", 0.70),
+            max_lost_frames=trk_cfg.get("track_buffer_frames", 60),
         )
 
         # 3. One Euro Filter per track ID
@@ -193,17 +203,22 @@ class DecoupledPipeline:
         temp_cfg = model_cfg.get("temporal", {})
         window_size = temp_cfg.get("window_size", 30)
         self.sequence_buffer = SequenceBuffer(window_size=window_size)
-        self.feature_extractor = TemporalFeatureExtractor(fps=15.0)
+        self.feature_extractor = TemporalFeatureExtractor(fps=self.temporal_hz)
 
         # 5. Dual-Stream AI Models (ST-Transformer / TCN & Periodic Autoencoder)
+        # Device for these tiny (~2 MB) sequence models is configurable
+        # (inference.yaml runtime.temporal_device); falls back to CPU without a GPU.
+        temporal_device = infer_cfg.get("runtime", {}).get("temporal_device", "cuda")
+        if temporal_device == "cuda" and self.device == "cpu":
+            temporal_device = "cpu"
         self.action_classifier = action_classifier or ActionClassifier(
             weights_path=temp_cfg.get("weights_path", None),
-            device=self.device,
+            device=temporal_device,
             architecture=temp_cfg.get("architecture", "tcn"),
         )
         self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(
             weights_path=model_cfg.get("anomaly", {}).get("weights_path", None),
-            device=self.device,
+            device=temporal_device,
         )
         self.behavior_analyzer = BehaviorSequenceAnalyzer()
 
@@ -258,6 +273,10 @@ class DecoupledPipeline:
         self._packet_lock = threading.Lock()
         self._new_frame_event = threading.Event()
         self._ai_frame_count = 0
+        self._last_processed_packet: Optional[FramePacket] = None
+        self._last_temporal_ts: float = 0.0
+        self._temporal_tick_count = 0
+        self._last_assessments: Dict[int, RiskAssessment] = {}
 
     def start(self) -> None:
         """Start background AI inference thread."""
@@ -302,6 +321,11 @@ class DecoupledPipeline:
 
         if packet is None or packet.frame is None:
             return
+        # The wait above times out when the camera is slower than the AI; never feed the
+        # same frame twice (duplicate timestamps corrupt tracker velocity & kinematics).
+        if packet is self._last_processed_packet:
+            return
+        self._last_processed_packet = packet
 
         self._ai_frame_count += 1
         # Subsample frames: e.g. process 1 out of every ai_stride frames
@@ -336,9 +360,15 @@ class DecoupledPipeline:
         # 2. ByteTrack with Fall Protection
         active_tracks = self.tracker.update(detections, packet.timestamp)
         active_track_ids = {t.track_id for t in active_tracks}
-        self.sequence_buffer.update_activity(active_track_ids)
-        self.risk_engine.cleanup_inactive(active_track_ids)
-        self.gated_trigger.cleanup_inactive(active_track_ids)
+
+        # Fixed-rate temporal tick (0.9 tolerance absorbs camera timestamp jitter)
+        temporal_tick = (packet.timestamp - self._last_temporal_ts) >= self._temporal_period * 0.9
+        if temporal_tick:
+            self._last_temporal_ts = packet.timestamp
+            self._temporal_tick_count += 1
+            self.sequence_buffer.update_activity(active_track_ids)
+            self.risk_engine.cleanup_inactive(active_track_ids)
+            self.gated_trigger.cleanup_inactive(active_track_ids)
 
         # Cleanup translation offset buffers for dead tracks
         dead_tids = [tid for tid in self._prev_raw_keypoints if tid not in active_track_ids]
@@ -396,15 +426,16 @@ class DecoupledPipeline:
                 )
                 poses_dict[tid] = pose_res
 
-                # Record snapshot into SequenceBuffer
-                snapshot = TrackSnapshot(
-                    timestamp=packet.timestamp,
-                    bbox=track.bbox,
-                    keypoints=filtered_kp,
-                    normalized_keypoints=norm_kp,
-                    torso_angle=torso_angle,
-                )
-                self.sequence_buffer.add_snapshot(tid, snapshot)
+                # Record snapshot into SequenceBuffer at the temporal sampling rate only
+                if temporal_tick:
+                    snapshot = TrackSnapshot(
+                        timestamp=packet.timestamp,
+                        bbox=track.bbox,
+                        keypoints=filtered_kp,
+                        normalized_keypoints=norm_kp,
+                        torso_angle=torso_angle,
+                    )
+                    self.sequence_buffer.add_snapshot(tid, snapshot)
 
         # 4. Cascade / Gated Temporal Reasoning & Risk Evaluation
         assessments: List[RiskAssessment] = []
@@ -418,7 +449,12 @@ class DecoupledPipeline:
         # went completely unmonitored during the critical first second of a fall.
         MIN_SNAPSHOTS_FOR_GATING = 3
 
-        for track in active_tracks:
+        if not temporal_tick:
+            # Between temporal ticks only perception/tracking is refreshed; keep the
+            # last risk assessment of every still-active track for rendering.
+            assessments = [a for tid, a in self._last_assessments.items() if tid in active_track_ids]
+
+        for track in (active_tracks if temporal_tick else []):
             tid = track.track_id
             snapshots_hist = self.sequence_buffer.get_snapshots(tid)
             if len(snapshots_hist) >= MIN_SNAPSHOTS_FOR_GATING:
@@ -426,7 +462,7 @@ class DecoupledPipeline:
                 kinematics = self.feature_extractor.extract(snapshots_hist)
 
                 # Retrieve previous assessment state for hysteresis
-                prev_ass = self.shared_state.assessments.get(tid)
+                prev_ass = self._last_assessments.get(tid)
                 curr_state = prev_ass.state if prev_ass else "NORMAL"
 
                 # Tier 1: Biomechanical Gating Filter
@@ -440,7 +476,7 @@ class DecoupledPipeline:
                 if gate_res.should_run_ai:
                     # Tier 2: Deep AI Inference (Gate OPEN: Hard fall, slow slide, Z-axis fall, or hold-on timer)
                     action_pred = self.action_classifier.predict(seq)
-                    if self._ai_frame_count % (self.ai_stride * self.anomaly_interval) == 0:
+                    if self._temporal_tick_count % self.anomaly_interval == 0:
                         anomaly_res = self.anomaly_detector.score(seq)
                     else:
                         anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
@@ -468,6 +504,9 @@ class DecoupledPipeline:
                 )
                 if alert is not None:
                     alerts_raised.append(alert)
+
+        if temporal_tick:
+            self._last_assessments = {a.track_id: a for a in assessments}
 
         # Update shared render state atomically
         ai_fps = self.ai_profiler.fps
@@ -541,5 +580,9 @@ class DecoupledPipeline:
             cv2.LINE_AA,
         )
 
-        alerts = self.shared_state.latest_alerts
+        # Hand each alert to the caller exactly once (previously the last 10 alerts were
+        # re-returned and re-printed on every rendered frame, stalling the render loop).
+        with self.shared_state.lock:
+            alerts = self.shared_state.latest_alerts
+            self.shared_state.latest_alerts = []
         return annotated, alerts

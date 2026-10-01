@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "elderly-ai-monitor"
 version = "0.1.0"
 description = "Real-time AI Camera Monitoring & Abnormal Behavior Detection System for Elderly Safety"
-authors = [{ name = "AI Vision Engineering Team" }]
+authors = [{ name = "Quốc Cường" }]
 readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
@@ -29,21 +29,6 @@ dependencies = [
     "matplotlib>=3.7.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-asyncio_mode = "auto"
-pythonpath = ["."]
-

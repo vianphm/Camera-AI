@@ -20,8 +20,8 @@ tracker:
   track_low_thresh: 0.15
   new_track_thresh: 0.60
   match_thresh: 0.70
-  track_buffer_frames: 60
-  frame_rate: 15
+  track_buffer_frames: 60          # Keep lost tracks ~2s at 30 FPS tracking rate
+  frame_rate: 30
 
 pose:
   architecture: "rtmo_s"
@@ -38,7 +38,7 @@ motion_gating:
   history: 100                     # MOG2 history frames
   var_threshold: 16.0              # MOG2 variance threshold
   detect_shadows: false            # MOG2 shadow detection (disabled to save CPU)
-  cooldown_frames: 45              # Hold-on timer after motion ceases (~3.0s at 15 FPS)
+  cooldown_frames: 90              # Hold-on timer after motion ceases (~3.0s at 30 FPS)
   idle_fps: 12.0                   # Throttled FPS when scene is static (10-15 FPS)
   active_fps: 30.0                 # Target FPS when motion is detected
   idle_stride: 2                   # Frame subsampling stride when idle (skip every other frame)

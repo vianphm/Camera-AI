@@ -236,7 +236,6 @@ def run_app():
             img_size=img_size,
             device=device,
             half=half,
-            ai_stride=2,
         )
         decoupled_pipe.start()
         pipeline = decoupled_pipe
@@ -346,11 +345,8 @@ def run_app():
                 annotated_frame = result.annotated_frame
                 alerts = result.alerts
 
-            # Đẩy ảnh sang MJPEG Web Stream
-            ret, jpeg = cv2.imencode(".jpg", annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if ret:
-                with srv.state_lock:
-                    srv.latest_annotated_frame = jpeg.tobytes()
+            # Đẩy ảnh sang MJPEG Web Stream (mã hóa JPEG trên luồng nền)
+            srv.publish_annotated_frame(annotated_frame)
 
     except (KeyboardInterrupt, SystemExit):
         pass

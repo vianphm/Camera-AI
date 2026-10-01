@@ -37,7 +37,6 @@ echo.
 
 .\.venv\Scripts\python.exe -m pip install --upgrade pip >nul 2>&1
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe -m pip install onnxruntime-directml websockets
 
 echo.
 echo ===============================================================================

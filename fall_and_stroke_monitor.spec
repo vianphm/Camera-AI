@@ -11,71 +11,39 @@ project_root = Path(SPECPATH).resolve()
 ort_datas, ort_binaries, ort_hidden = collect_all('onnxruntime')
 cv2_datas, cv2_binaries, cv2_hidden = collect_all('cv2')
 
-# Các thư mục cấu hình, mô hình AI, và giao diện web tĩnh
+# Các thư mục cấu hình, giao diện web tĩnh và CHỈ các mô hình AI mà pipeline thực sự dùng
+# (RTMO-s pose + ST-Transformer + Pose Autoencoder). Các file .pt / yolov8 / int8 thử nghiệm
+# không được đóng gói để giảm dung lượng bộ cài.
+REQUIRED_MODELS = [
+    'models/pose/rtmo-s.onnx',
+    'models/checkpoints/best_st_transformer.onnx',
+    'models/checkpoints/best_pose_autoencoder.onnx',
+]
+for rel in REQUIRED_MODELS:
+    if not (project_root / rel).exists():
+        raise SystemExit(f'[BUILD] Thiếu mô hình bắt buộc: {rel}')
+
 datas = [
     (str(project_root / 'configs'), 'configs'),
-    (str(project_root / 'models'), 'models'),
     (str(project_root / 'frontend'), 'frontend'),
     (str(project_root / 'app_icon.ico'), '.'),
     (str(project_root / 'app_icon.png'), '.'),
-] + ort_datas + cv2_datas
+] + [(str(project_root / rel), str(Path(rel).parent)) for rel in REQUIRED_MODELS] + ort_datas + cv2_datas
 
-binaries = ort_binaries + cv2_binaries
+# Ứng dụng chạy GPU qua DirectML. Các provider CUDA/TensorRT còn sót lại trong .venv
+# (từ onnxruntime-gpu) không dùng được với bản DirectML và nặng ~165 MB -> loại bỏ.
+_EXCLUDED_ORT_DLLS = ('onnxruntime_providers_cuda.dll', 'onnxruntime_providers_tensorrt.dll')
+binaries = [b for b in ort_binaries if Path(b[0]).name.lower() not in _EXCLUDED_ORT_DLLS] + cv2_binaries
 
 # Danh sách đầy đủ các hidden imports cho web server và AI engine
-hiddenimports = [
-    'src',
-    'src.api',
-    'src.api.server',
-    'src.pipeline',
-    'src.pipeline.realtime_pipeline',
-    'src.pipeline.decoupled_pipeline',
-    'src.camera',
-    'src.camera.stream',
-    'src.camera.webcam',
-    'src.camera.rtsp',
-    'src.camera.video_file',
-    'src.camera.synthetic',
-    'src.camera.camera_permission',
-    'src.camera.multi_camera',
-    'src.pose',
-    'src.pose.pose_estimator',
-    'src.pose.rtmo_estimator',
-    'src.pose.keypoints',
-    'src.detection',
-    'src.detection.detector',
-    'src.detection.person_detector',
-    'src.detection.detector_factory',
-    'src.tracking',
-    'src.tracking.tracker',
-    'src.tracking.bytetrack',
-    'src.tracking.track_manager',
-    'src.temporal',
-    'src.temporal.temporal_model',
-    'src.temporal.temporal_factory',
-    'src.anomaly',
-    'src.anomaly.anomaly_score',
-    'src.risk',
-    'src.risk.risk_engine',
-    'src.risk.state_machine',
-    'src.risk.threshold_manager',
-    'src.alerts',
-    'src.alerts.alert_manager',
-    'src.alerts.event_logger',
-    'src.alerts.notification',
-    'src.utils',
-    'src.utils.config',
-    'src.utils.profiler',
+hiddenimports = collect_submodules('src') + [
     'main',
     'yaml',
     'dotenv',
     'pydantic',
     'pydantic_core',
-    'filterpy',
-    'filterpy.kalman',
     'scipy',
-    'scipy.spatial',
-    'scipy.spatial.distance',
+    'scipy.optimize',
     'websockets',
     'websockets.legacy',
     'websockets.legacy.server',
@@ -94,12 +62,16 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'PIL.ImageTk', 'tests', 'archive'],
+    excludes=['tkinter', 'matplotlib', 'PIL.ImageTk', 'tests', 'archive', 'torch', 'torchvision',
+              'ultralytics', 'tensorrt', 'cuda', 'PIL', 'pytest', 'IPython', 'notebook'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Lọc lần nữa sau Analysis (hook onnxruntime có thể tự thêm lại các DLL này)
+a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in _EXCLUDED_ORT_DLLS]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

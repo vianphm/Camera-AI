@@ -1,82 +1,79 @@
-import os
+"""Đóng gói MÃ NGUỒN dự án thành dist/Fall_and_Stroke_Warning_System_Source_v<version>.zip.
+
+Gồm toàn bộ file được git quản lý (theo trạng thái hiện tại của thư mục làm việc,
+kể cả file mới chưa commit nhưng không bị .gitignore) + các mô hình ONNX bắt buộc
+để chạy được ngay bằng 1_Cai_Dat_Tu_Dong.bat / 2_Chay_He_Thong.bat.
+"""
+
+import subprocess
 import sys
+import tomllib
 import zipfile
-import shutil
 from pathlib import Path
 
-def package_project():
-    root_dir = Path(__file__).resolve().parent
-    dist_dir = root_dir / "dist" / "Fall_and_Stroke_Warning_System"
-    output_zip = root_dir / "Fall_and_Stroke_Warning_System_Portable.zip"
-    
-    print("=" * 70)
-    print("    FALL AND STROKE WARNING SYSTEM — CÔNG CỤ TỰ ĐỘNG ĐÓNG GÓI PORTABLE")
-    print("=" * 70)
-    print(f"[*] Thư mục dự án : {root_dir}")
-    print(f"[*] Tệp nén đầu ra: {output_zip.name}\n")
-    
-    if dist_dir.exists() and (dist_dir / "Fall_and_Stroke_Warning_System.exe").exists():
-        print(f"[+] Tìm thấy bản build độc lập PyInstaller tại: dist/Fall_and_Stroke_Warning_System")
-        print(f"[*] Đang đóng gói toàn bộ ứng dụng độc lập (Standalone App)...")
-        
-        # Đảm bảo có hướng dẫn sử dụng trong thư mục dist
-        huong_dan_src = root_dir / "HUONG_DAN_SU_DUNG.txt"
-        if huong_dan_src.exists():
-            shutil.copy2(huong_dan_src, dist_dir / "HUONG_DAN_SU_DUNG.txt")
-            
-        with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
-            for dirpath, _, filenames in os.walk(dist_dir):
-                for filename in filenames:
-                    full_path = Path(dirpath) / filename
-                    rel_path = full_path.relative_to(dist_dir)
-                    zipf.write(full_path, arcname=f"Fall_and_Stroke_Warning_System/{str(rel_path)}")
-    else:
-        print("[!] Chưa tìm thấy thư mục dist/Fall_and_Stroke_Warning_System.")
-        print("[*] Đang đóng gói phiên bản mã nguồn dự phòng...")
-        include_dirs = ["configs", "frontend", "models", "src", "scripts", "docs"]
-        include_files = [
-            "Fall_and_Stroke_Warning_System.exe",
-            "Build_App_PyInstaller.bat",
-            "HUONG_DAN_SU_DUNG.txt",
-            "README.md",
-            "app_icon.ico",
-            "app_icon.png",
-            "app_runner.py",
-            "main.py",
-            "requirements.txt",
-        ]
-        exclude_extensions = {".pyc", ".pyo", ".tmp", ".log"}
-        exclude_dirs = {"__pycache__", ".git", ".claude", ".gemini", "tests", "data", "build", "dist"}
+ROOT_DIR = Path(__file__).resolve().parent
+DIST_DIR = ROOT_DIR / "dist"
+PACKAGE_NAME = "Fall_and_Stroke_Warning_System"
 
-        with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
-            for fname in include_files:
-                fpath = root_dir / fname
-                if fpath.is_file():
-                    zipf.write(fpath, arcname=f"Fall_and_Stroke_Warning_System/{fname}")
-            
-            for folder_name in include_dirs:
-                folder_path = root_dir / folder_name
-                if not folder_path.is_dir():
-                    continue
-                for dirpath, dirnames, filenames in os.walk(folder_path):
-                    dirnames[:] = [d for d in dirnames if d not in exclude_dirs]
-                    for filename in filenames:
-                        ext = Path(filename).suffix.lower()
-                        if ext in exclude_extensions:
-                            continue
-                        full_path = Path(dirpath) / filename
-                        rel_path = full_path.relative_to(root_dir)
-                        zipf.write(full_path, arcname=f"Fall_and_Stroke_Warning_System/{str(rel_path)}")
+# Mô hình bị .gitignore nhưng pipeline cần để chạy
+REQUIRED_MODELS = [
+    "models/pose/rtmo-s.onnx",
+    "models/checkpoints/best_st_transformer.onnx",
+    "models/checkpoints/best_pose_autoencoder.onnx",
+]
 
-    zip_size_mb = output_zip.stat().st_size / (1024 * 1024)
-    print("\n" + "=" * 70)
-    print(f" [THÀNH CÔNG] Đã tạo gói nén hoàn chỉnh: {output_zip.name}")
-    print(f" [DUNG LƯỢNG]: {zip_size_mb:.2f} MB")
-    print(f" [VỊ TRÍ FILE]: {output_zip}")
-    print(" Người nhận chỉ cần giải nén file ZIP và bấm vào file:")
-    print(" 👉 Fall_and_Stroke_Warning_System.exe")
-    print(" là sử dụng được ngay, KHÔNG CẦN CÀI THÊM BẤT KỲ CÁI GÌ!")
+# Không đưa vào gói mã nguồn
+EXCLUDED_PREFIXES = (".claude/", ".gemini/", "dist/", "build/")
+EXCLUDED_SUFFIXES = (".zip",)
+
+
+def project_version() -> str:
+    with open(ROOT_DIR / "pyproject.toml", "rb") as f:
+        return tomllib.load(f)["project"]["version"]
+
+
+def list_source_files() -> list[Path]:
+    """Danh sách file mã nguồn theo git (tracked + untracked không bị ignore, bỏ file đã xóa)."""
+    out = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT_DIR, capture_output=True, check=True,
+    ).stdout.decode("utf-8")
+    files: list[Path] = []
+    for rel in filter(None, out.split("\0")):
+        if rel.startswith(EXCLUDED_PREFIXES) or rel.endswith(EXCLUDED_SUFFIXES):
+            continue
+        path = ROOT_DIR / rel
+        if path.is_file():  # bỏ qua file đã bị xóa khỏi thư mục làm việc
+            files.append(path)
+    return files
+
+
+def package_source() -> Path:
+    version = project_version()
+    DIST_DIR.mkdir(exist_ok=True)
+    output_zip = DIST_DIR / f"{PACKAGE_NAME}_Source_v{version}.zip"
+
+    files = list_source_files()
+    for rel in REQUIRED_MODELS:
+        model = ROOT_DIR / rel
+        if not model.exists():
+            sys.exit(f"[LỖI] Thiếu mô hình bắt buộc: {rel}")
+        files.append(model)
+
     print("=" * 70)
+    print("    FALL AND STROKE WARNING SYSTEM — ĐÓNG GÓI MÃ NGUỒN")
+    print("=" * 70)
+    with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zipf:
+        for path in sorted(set(files)):
+            rel_path = path.relative_to(ROOT_DIR).as_posix()
+            zipf.write(path, arcname=f"{PACKAGE_NAME}_Source/{rel_path}")
+
+    size_mb = output_zip.stat().st_size / (1024 * 1024)
+    print(f" [THÀNH CÔNG] {output_zip.relative_to(ROOT_DIR)}  ({len(set(files))} file, {size_mb:.1f} MB)")
+    print(" Người nhận giải nén, chạy 1_Cai_Dat_Tu_Dong.bat rồi 2_Chay_He_Thong.bat.")
+    print("=" * 70)
+    return output_zip
+
 
 if __name__ == "__main__":
-    package_project()
+    package_source()

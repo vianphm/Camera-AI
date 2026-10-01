@@ -242,7 +242,6 @@ def main() -> None:
             img_size=img_size,
             device=configs["inference"].get("runtime", {}).get("device", "cuda"),
             half=configs["inference"].get("runtime", {}).get("use_fp16", True),
-            ai_stride=2,
         )
         decoupled_pipe.start()
         pipeline = decoupled_pipe
@@ -377,16 +376,13 @@ def main() -> None:
                 annotated_frame = result.annotated_frame
                 alerts = result.alerts
 
-            # Cập nhật MJPEG Web Stream cho Browser Dashboard
+            # Cập nhật MJPEG Web Stream (mã hóa JPEG chạy trên luồng nền, không chặn vòng lặp)
             if not args.no_server:
-                ret, jpeg = cv2.imencode(".jpg", annotated_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                if ret:
-                    try:
-                        import src.api.server as srv
-                        with srv.state_lock:
-                            srv.latest_annotated_frame = jpeg.tobytes()
-                    except Exception:
-                        pass
+                try:
+                    import src.api.server as srv
+                    srv.publish_annotated_frame(annotated_frame)
+                except Exception:
+                    pass
 
             # Xử lý cảnh báo
             for alert in alerts:
