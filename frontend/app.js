@@ -395,11 +395,46 @@
     // 3. KÍCH HOẠT TIẾNG CHUÔNG CẢNH BÁO RA LOA (Chuông té ngã khẩn cấp hoặc chuông hành vi bất thường)
     triggerAlarmChime(isFallRisk ? "fall" : "abnormal");
 
-    // 4. Prepend to feed
+    // 4. Cập nhật thẻ CẢNH BÁO TÉ NGÃ trên giao diện mới
+    const elIncTs = document.getElementById("incident-timestamp-txt");
+    const elIncConf = document.getElementById("incident-confidence-txt");
+    const elIncStatus = document.getElementById("incident-status-tag");
+    const elFallDemoBox = document.getElementById("video-fall-box-demo");
+
+    if (elIncTs) elIncTs.textContent = `${new Date().toLocaleTimeString()} - ${new Date().toLocaleDateString('vi-VN')}`;
+    if (elIncConf) elIncConf.textContent = `${(riskScore * 100).toFixed(0)}%`;
+    if (elIncStatus) {
+      elIncStatus.textContent = "Đang xử lý";
+      elIncStatus.style.background = "#fef2f2";
+      elIncStatus.style.borderColor = "#fecaca";
+      elIncStatus.style.color = "#dc2626";
+    }
+    if (elFallDemoBox) {
+      elFallDemoBox.style.display = isFallRisk ? "block" : "none";
+    }
+
+    // 5. Thêm dòng vào Bảng Lịch Sử Cảnh Báo
+    const elAlertsTbody = document.getElementById("alerts-table-body");
+    if (elAlertsTbody) {
+      const tr = document.createElement("tr");
+      tr.className = "alert-row-highlight";
+      tr.innerHTML = `
+        <td><span class="id-tag">#${String(alertCount + 1).padStart(3, '0')}</span></td>
+        <td>${new Date().toLocaleTimeString()}</td>
+        <td><span class="badge-type-danger">${isFallRisk ? "Té ngã" : "Bất thường"}</span></td>
+        <td>Camera 01</td>
+        <td><span class="badge-state-pending">Đang xử lý</span></td>
+      `;
+      elAlertsTbody.prepend(tr);
+    }
+
+    // 6. Prepend to feed
     renderAlertCard(alert, true);
 
-    // 5. Update KPI
-    updateRiskKpi(riskScore, isFallRisk ? "NGUY CƠ CAO (TÉ NGÃ)" : "BẤT THƯỜNG / NGHI VẤN");
+    // 7. Update KPI
+    updateRiskKpi(riskScore, isFallRisk ? "Cao" : "Nghi vấn");
+    const elTotalAlerts = document.getElementById("stat-total-alerts-count");
+    if (elTotalAlerts) elTotalAlerts.textContent = alertCount;
   }
 
   function renderAlertCard(alert, isNew = false) {
@@ -1250,6 +1285,64 @@
       }
     });
   }
+
+  // 5. Kết nối các tương tác trên giao diện Compact mới
+  const btnQuickSnap = document.getElementById("btn-quick-snapshot");
+  if (btnQuickSnap) {
+    btnQuickSnap.addEventListener("click", () => {
+      const elBtnSnap = document.getElementById("btn-snapshot");
+      if (elBtnSnap) elBtnSnap.click();
+    });
+  }
+
+  const btnQuickFull = document.getElementById("btn-quick-fullscreen");
+  if (btnQuickFull) {
+    btnQuickFull.addEventListener("click", () => {
+      if (elBtnFullscreen) elBtnFullscreen.click();
+    });
+  }
+
+  const sidebarSettings = document.getElementById("sidebar-btn-settings");
+  if (sidebarSettings && elBtnOpenSettings) {
+    sidebarSettings.addEventListener("click", (e) => {
+      e.preventDefault();
+      elBtnOpenSettings.click();
+    });
+  }
+
+  const btnProcessInc = document.getElementById("btn-process-incident");
+  if (btnProcessInc) {
+    btnProcessInc.addEventListener("click", () => {
+      const tag = document.getElementById("incident-status-tag");
+      if (tag) {
+        tag.textContent = "Đã xử lý";
+        tag.style.background = "#ecfdf5";
+        tag.style.borderColor = "#a7f3d0";
+        tag.style.color = "#059669";
+      }
+      stopContinuousAlarm();
+      clearEmergencyVisuals();
+      if (elEmergencyBar) elEmergencyBar.style.display = "none";
+      updateRiskKpi(0.05, "Bình thường");
+    });
+  }
+
+  const btnViewInc = document.getElementById("btn-view-incident-detail");
+  if (btnViewInc) {
+    btnViewInc.addEventListener("click", () => {
+      const historyCard = document.getElementById("alerts-history-card");
+      if (historyCard) historyCard.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+
+  document.querySelectorAll(".sidebar-link").forEach(link => {
+    link.addEventListener("click", (e) => {
+      if (link.id === "sidebar-btn-settings") return;
+      document.querySelectorAll(".sidebar-link").forEach(l => l.classList.remove("active"));
+      link.classList.add("active");
+    });
+  });
+
 
   // 10. Initialization Sequence
   connectAlertsWebSocket();
