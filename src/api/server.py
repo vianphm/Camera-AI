@@ -19,6 +19,8 @@ from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream
 from src.camera.video_file import VideoFileStream
 from src.alerts.event_logger import EventLogger, AlertEvent
+from src.alerts.telegram import TelegramSettings
+from src.api import telegram_routes
 from src.utils.config import get_project_root, load_config
 from src.utils.profiler import ResourceMonitor
 
@@ -51,6 +53,16 @@ resource_monitor = ResourceMonitor()
 # pipeline threads (which are not the asyncio loop thread) can schedule
 # WebSocket sends onto it via run_coroutine_threadsafe.
 server_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _apply_telegram_settings_to_pipeline(settings: TelegramSettings) -> None:
+    alert_manager = getattr(pipeline_instance, "alert_manager", None)
+    if alert_manager is not None:
+        alert_manager.dispatcher.update_telegram_settings(settings)
+
+
+app.include_router(telegram_routes.router)
+telegram_routes.add_settings_listener(_apply_telegram_settings_to_pipeline)
 
 
 @app.on_event("startup")

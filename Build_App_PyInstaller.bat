@@ -4,6 +4,12 @@ cd /d "%~dp0"
 title Fall and Stroke Warning System — Build Release
 cls
 
+:: Tham số (tuỳ chọn) để CI chèn bước ký số giữa các giai đoạn:
+::   (trống)    chạy đủ 3 bước
+::   app        chỉ bước 1 — PyInstaller
+::   installer  chỉ bước 2 — Inno Setup (dùng dist\%APP%\ đã có)
+set "STAGE=%~1"
+
 set "APP=Fall_and_Stroke_Warning_System"
 set "APPDIR=dist\%APP%"
 
@@ -32,6 +38,7 @@ if not exist ".venv\Scripts\pyinstaller.exe" (
 for /f "usebackq delims=" %%v in (`.\.venv\Scripts\python.exe -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"`) do set "APP_VERSION=%%v"
 echo [*] Phiên bản: %APP_VERSION%
 echo.
+if /i "%STAGE%"=="installer" goto :installer
 
 :: ---------------------------------------------------------------------------
 :: 1. PyInstaller
@@ -50,10 +57,12 @@ copy /Y "scripts\huy_startup.vbs" "%APPDIR%\scripts\" >nul
 copy /Y "app_icon.ico" "%APPDIR%\" >nul
 copy /Y "HUONG_DAN_SU_DUNG.txt" "%APPDIR%\" >nul
 if not exist "%APPDIR%\data\processed\events" mkdir "%APPDIR%\data\processed\events"
+if /i "%STAGE%"=="app" goto :done
 
 :: ---------------------------------------------------------------------------
 :: 2. Bộ cài đặt Inno Setup
 :: ---------------------------------------------------------------------------
+:installer
 echo [2/3] Tạo bộ cài đặt Inno Setup...
 set "ISCC="
 if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
@@ -66,6 +75,7 @@ if not defined ISCC (
 )
 "%ISCC%" /Q /DMyAppVersion=%APP_VERSION% "installer\setup.iss"
 if %errorlevel% neq 0 goto :fail
+if /i "%STAGE%"=="installer" goto :done
 
 :: ---------------------------------------------------------------------------
 :: 3. Gói mã nguồn
@@ -74,6 +84,7 @@ echo [3/3] Đóng gói mã nguồn...
 .\.venv\Scripts\python.exe dong_goi_du_an.py
 if %errorlevel% neq 0 goto :fail
 
+:done
 echo.
 echo ===============================================================================
 echo  [THÀNH CÔNG] Gửi cho người dùng file:

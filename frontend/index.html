@@ -558,7 +558,57 @@
           </div>
         </div>
 
-        <!-- Mục 4: Điều khiển & Tắt hệ thống -->
+        <!-- Mục 4: Thông báo Telegram -->
+        <div class="settings-group" id="telegram-settings-group">
+          <div class="settings-group-header">
+            <div class="settings-group-info">
+              <div class="settings-item-title">
+                <span>📱 Thông báo qua Telegram</span>
+                <span class="badge-status-pill pill-off" id="telegram-status-pill">Chưa cài đặt</span>
+              </div>
+              <p class="settings-item-desc">
+                Gửi cảnh báo kèm ảnh tới điện thoại người nhà ngay khi phát hiện bất thường, không cần mở trang web này.
+              </p>
+            </div>
+            <label class="switch" title="Bật/tắt gửi cảnh báo Telegram">
+              <input type="checkbox" id="toggle-telegram">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <ol class="telegram-steps">
+            <li>Mở Telegram, tìm <strong>@BotFather</strong>, gửi lệnh <code>/newbot</code> và đặt tên cho bot.</li>
+            <li>Sao chép <strong>Bot Token</strong> mà BotFather gửi về và dán vào ô dưới.</li>
+            <li>Mở bot vừa tạo, bấm <strong>Start</strong> (hoặc thêm bot vào nhóm gia đình rồi nhắn 1 tin), sau đó bấm <strong>Lấy Chat ID tự động</strong>.</li>
+          </ol>
+
+          <div class="telegram-field">
+            <label for="telegram-token-input">Bot Token</label>
+            <input type="password" id="telegram-token-input" class="cam-input" placeholder="123456789:AAH..." autocomplete="off" spellcheck="false">
+          </div>
+          <div class="telegram-field">
+            <label for="telegram-chat-input">Chat ID</label>
+            <div class="cam-input-action-row">
+              <input type="text" id="telegram-chat-input" class="cam-input" placeholder="Ví dụ: 123456789" autocomplete="off" spellcheck="false">
+              <button class="btn-modal-action btn-outline" id="btn-telegram-detect" type="button">
+                <span>🔎</span> Lấy Chat ID tự động
+              </button>
+            </div>
+            <select id="telegram-chat-select" class="cam-select" style="display: none;"></select>
+          </div>
+
+          <div class="settings-actions-row">
+            <button class="btn-modal-action" id="btn-telegram-save" type="button">
+              <span>💾</span> Lưu cài đặt
+            </button>
+            <button class="btn-modal-action btn-outline" id="btn-telegram-test" type="button">
+              <span>📨</span> Gửi tin thử
+            </button>
+          </div>
+          <div class="settings-feedback" id="telegram-feedback" style="display: none;"></div>
+        </div>
+
+        <!-- Mục 5: Điều khiển & Tắt hệ thống -->
         <div class="settings-group group-danger">
           <div class="settings-group-header">
             <div class="settings-group-info">

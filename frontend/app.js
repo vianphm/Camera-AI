@@ -1157,6 +1157,7 @@
   function openSettingsModal() {
     if (elSettingsOverlay) elSettingsOverlay.style.display = "flex";
     fetchAutostartStatus();
+    fetchTelegramSettings();
   }
 
   function closeSettingsModal() {
@@ -1270,7 +1271,128 @@
     });
   }
 
-  // 4. Tắt hệ thống an toàn
+  // 4. Thông báo Telegram
+  const elToggleTelegram = document.getElementById("toggle-telegram");
+  const elTelegramPill = document.getElementById("telegram-status-pill");
+  const elTelegramToken = document.getElementById("telegram-token-input");
+  const elTelegramChat = document.getElementById("telegram-chat-input");
+  const elTelegramChatSelect = document.getElementById("telegram-chat-select");
+  const elBtnTelegramDetect = document.getElementById("btn-telegram-detect");
+  const elBtnTelegramSave = document.getElementById("btn-telegram-save");
+  const elBtnTelegramTest = document.getElementById("btn-telegram-test");
+  const elTelegramFeedback = document.getElementById("telegram-feedback");
+
+  function showTelegramFeedback(ok, message) {
+    if (!elTelegramFeedback) return;
+    elTelegramFeedback.style.display = "block";
+    elTelegramFeedback.className = `settings-feedback ${ok ? "feedback-success" : "feedback-error"}`;
+    elTelegramFeedback.textContent = `${ok ? "✓" : "⚠"} ${message}`;
+  }
+
+  function updateTelegramPill(settings) {
+    if (!elTelegramPill) return;
+    if (settings.ready) {
+      elTelegramPill.textContent = "Đang BẬT";
+      elTelegramPill.className = "badge-status-pill pill-on";
+    } else {
+      elTelegramPill.textContent = settings.has_token ? "Đang TẮT" : "Chưa cài đặt";
+      elTelegramPill.className = "badge-status-pill pill-off";
+    }
+  }
+
+  function applyTelegramSettings(settings) {
+    if (elToggleTelegram) elToggleTelegram.checked = !!settings.enabled;
+    if (elTelegramToken) {
+      elTelegramToken.value = "";
+      elTelegramToken.placeholder = settings.has_token
+        ? `Đã lưu (${settings.token_masked}) — bỏ trống để giữ nguyên`
+        : "123456789:AAH...";
+    }
+    if (elTelegramChat) elTelegramChat.value = settings.chat_id || "";
+    updateTelegramPill(settings);
+  }
+
+  async function fetchTelegramSettings() {
+    try {
+      const res = await fetch(`${API_BASE}/api/settings/telegram`);
+      if (res.ok) applyTelegramSettings(await res.json());
+    } catch (_) {}
+  }
+
+  async function postTelegram(path, body) {
+    const res = await fetch(`${API_BASE}/api/settings/telegram${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `Lỗi máy chủ (HTTP ${res.status})`);
+    return data;
+  }
+
+  async function withBusyButton(button, busyLabel, action) {
+    if (!button) return;
+    const original = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = `<span>⏳</span> ${busyLabel}`;
+    try {
+      await action();
+    } catch (err) {
+      showTelegramFeedback(false, err.message || "Không thể kết nối API.");
+    } finally {
+      button.disabled = false;
+      button.innerHTML = original;
+    }
+  }
+
+  function telegramFormValues() {
+    return {
+      bot_token: elTelegramToken ? elTelegramToken.value.trim() : "",
+      chat_id: elTelegramChat ? elTelegramChat.value.trim() : "",
+    };
+  }
+
+  if (elBtnTelegramDetect) {
+    elBtnTelegramDetect.addEventListener("click", () => withBusyButton(elBtnTelegramDetect, "Đang tìm...", async () => {
+      const data = await postTelegram("/detect-chat", { bot_token: telegramFormValues().bot_token });
+      if (elTelegramChatSelect) {
+        elTelegramChatSelect.innerHTML = "";
+        elTelegramChatSelect.style.display = data.chats.length > 1 ? "block" : "none";
+        data.chats.forEach((chat) => {
+          const opt = document.createElement("option");
+          opt.value = chat.chat_id;
+          opt.textContent = `${chat.name} (${chat.chat_id})`;
+          elTelegramChatSelect.appendChild(opt);
+        });
+      }
+      if (data.chats.length && elTelegramChat) elTelegramChat.value = data.chats[0].chat_id;
+      showTelegramFeedback(data.status === "success", data.message);
+    }));
+  }
+
+  if (elTelegramChatSelect) {
+    elTelegramChatSelect.addEventListener("change", () => {
+      if (elTelegramChat) elTelegramChat.value = elTelegramChatSelect.value;
+    });
+  }
+
+  if (elBtnTelegramSave) {
+    elBtnTelegramSave.addEventListener("click", () => withBusyButton(elBtnTelegramSave, "Đang lưu...", async () => {
+      const enabled = elToggleTelegram ? elToggleTelegram.checked : true;
+      const data = await postTelegram("", { ...telegramFormValues(), enabled });
+      applyTelegramSettings(data.settings);
+      showTelegramFeedback(true, data.message);
+    }));
+  }
+
+  if (elBtnTelegramTest) {
+    elBtnTelegramTest.addEventListener("click", () => withBusyButton(elBtnTelegramTest, "Đang gửi...", async () => {
+      const data = await postTelegram("/test", telegramFormValues());
+      showTelegramFeedback(true, data.message);
+    }));
+  }
+
+  // 5. Tắt hệ thống an toàn
   if (elBtnModalShutdown) {
     elBtnModalShutdown.addEventListener("click", async () => {
       if (!confirm("Bạn có chắc chắn muốn TẮT hệ thống AI giám sát và dừng máy chủ không?")) return;
@@ -1286,7 +1408,7 @@
     });
   }
 
-  // 5. Kết nối các tương tác trên giao diện Compact mới
+  // 6. Kết nối các tương tác trên giao diện Compact mới
   const btnQuickSnap = document.getElementById("btn-quick-snapshot");
   if (btnQuickSnap) {
     btnQuickSnap.addEventListener("click", () => {

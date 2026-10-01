@@ -118,3 +118,24 @@ Open browser at: `http://localhost:8000/docs` for interactive Swagger API.
 - [**`TRAINING.md`**](TRAINING.md): Training pipeline, augmentations, loss functions, and ONNX/TensorRT export.
 - [**`EVALUATION.md`**](EVALUATION.md): Accuracy metrics, latency profiler, and real-time benchmark reports.
 - [**`IMPLEMENTATION_PLAN.md`**](IMPLEMENTATION_PLAN.md): 13-phase roadmap and directory tree details.
+
+---
+
+## Code Signing Policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Windows release binaries (`Fall_and_Stroke_Warning_System.exe` and `Fall_and_Stroke_Warning_System_Setup.exe`) are built from this repository by the [GitHub Actions release workflow](.github/workflows/release.yml) and signed through SignPath. Only binaries built from this repository's source are signed; bundled third-party libraries keep their original publishers' signatures.
+
+**Team roles**
+- Committers and reviewers: [QuocCuong66](https://github.com/QuocCuong66)
+- Approvers: [QuocCuong66](https://github.com/QuocCuong66)
+
+**Privacy policy**
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it. Camera frames are processed locally. Alerts are sent only to the Telegram bot or webhook that the user configures.
+
+---
+
+## License
+
+[MIT](LICENSE). Bundled model weights keep their original licenses: RTMO-s pose model from [OpenMMLab MMPose](https://github.com/open-mmlab/mmpose) (Apache-2.0).
