@@ -7,7 +7,7 @@
 #define MyAppName "Fall and Stroke Warning System"
 #define MyAppShortName "Fall_and_Stroke_Warning_System"
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0"
+  #define MyAppVersion "0.1.1"
 #endif
 #define MyAppPublisher "Quốc Cường"
 #define MyAppExeName "Fall_and_Stroke_Warning_System.exe"
