@@ -38,9 +38,17 @@ Tại đây bạn có thể:
 3. 🔒 BẢO VỆ QUYỀN RIÊNG TƯ:
    - Gạt công tắc "Làm mờ khuôn mặt" để che mờ mặt người theo dõi.
 
-4. 🛑 TẮT HỆ THỐNG AN TOÀN:
-   - Cách 1: Bấm nút [X] đóng cửa sổ ứng dụng (hệ thống sẽ tự động tắt AI và thoát).
-   - Cách 2: Vào menu Cài đặt và bấm nút đỏ "TẮT HỆ THỐNG".
+4. 🛑 TẠM DỪNG / TẮT HỆ THỐNG:
+   - Tạm dừng camera: bấm nút ••• trên khung camera -> "DỪNG STREAM"
+     (bật lại bằng nút "BẬT CAMERA STREAM").
+   - Bấm nút [X] đóng cửa sổ: hệ thống VẪN CHẠY NGẦM và vẫn gửi cảnh báo.
+     Mở lại giao diện bằng trình duyệt: http://localhost:8000
+   - Tắt hẳn: vào menu Cài đặt và bấm nút đỏ "TẮT HỆ THỐNG".
+
+--------------------------------------------------------------------------------
+HƯỚNG DẪN CHI TIẾT (kết nối camera IP, Telegram, xử lý sự cố...)
+--------------------------------------------------------------------------------
+👉 https://quoccuong66.github.io/Project-monitoring-model/huong-dan.html
 
 --------------------------------------------------------------------------------
 GHI CHÚ KỸ THUẬT & LOGGING

@@ -71,7 +71,11 @@ class EventStateMachine:
 
         # 2. Forward Escalation Logic
         if self.state == MonitorState.NORMAL:
-            if risk_score >= self.thresholds.thresh_suspicious:
+            if risk_score >= self.thresholds.thresh_high_risk:
+                # Acute high-severity event: direct jump to ABNORMAL for rapid temporal debouncing
+                self.state = MonitorState.ABNORMAL
+                self.state_entry_time = timestamp
+            elif risk_score >= self.thresholds.thresh_suspicious:
                 self.state = MonitorState.SUSPICIOUS
                 self.state_entry_time = timestamp
 
@@ -90,17 +94,21 @@ class EventStateMachine:
                 if time_in_state >= self.thresholds.min_duration_abnormal:
                     self.state = MonitorState.HIGH_RISK
                     self.state_entry_time = timestamp
-            elif risk_score < self.thresholds.thresh_abnormal * 0.8:
+            elif risk_score < self.thresholds.thresh_suspicious:
                 self.state = MonitorState.SUSPICIOUS
                 self.state_entry_time = timestamp
 
         elif self.state == MonitorState.HIGH_RISK:
             # Confirmed emergency state! Ready for alert dispatch
-            # Debounce high risk confirmation time
-            if time_in_state >= self.thresholds.min_duration_high_risk:
-                self.state = MonitorState.ALERT_SENT
+            # Require that risk remains elevated throughout the debounce confirmation time
+            if risk_score >= self.thresholds.thresh_abnormal:
+                if time_in_state >= self.thresholds.min_duration_high_risk:
+                    self.state = MonitorState.ALERT_SENT
+                    self.state_entry_time = timestamp
+                    self.last_alert_time = timestamp
+            elif risk_score < self.thresholds.thresh_suspicious:
+                self.state = MonitorState.ABNORMAL
                 self.state_entry_time = timestamp
-                self.last_alert_time = timestamp
 
         elif self.state == MonitorState.ALERT_SENT:
             # Move to waiting for confirmation while alert cooldown is active

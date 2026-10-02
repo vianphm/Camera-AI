@@ -23,6 +23,7 @@ from src.pose.pose_estimator import YOLOv8PoseEstimator, PoseResult, translate_k
 from src.pose.one_euro_filter import KeypointOneEuroFilter
 from src.pose.keypoints import normalize_keypoints, compute_torso_angle
 from src.temporal.sequence_buffer import SequenceBuffer, TrackSnapshot
+from src.temporal.sequence_features import build_model_sequence
 from src.temporal.temporal_features import TemporalFeatureExtractor, KinematicFeatures
 from src.temporal.gated_trigger import KinematicGatedTrigger
 from src.action.action_classifier import ActionClassifier, ActionPrediction
@@ -142,20 +143,24 @@ class DecoupledPipeline:
         # Temporal/risk reasoning cadence. The temporal models, sequence window (30 frames ~ 2s),
         # gate hold-on timers and kinematic features are calibrated for 15 Hz sampling.
         self.temporal_hz = float(sched_cfg.get("temporal_hz", 15.0))
+        self.gated_ai = bool(sched_cfg.get("enable_gated_ai", True))
         self._temporal_period = 1.0 / max(1e-3, self.temporal_hz)
 
+        # GPU = an onnxruntime GPU provider (DirectML in the app build) or a working torch CUDA.
+        # torch may be absent or partial in the packaged app, so any failure there means "no".
+        has_cuda = False
         try:
-            import torch
-            has_cuda = torch.cuda.is_available()
+            import onnxruntime as ort
+            gpu_providers = {"CUDAExecutionProvider", "DmlExecutionProvider", "TensorrtExecutionProvider"}
+            has_cuda = bool(gpu_providers.intersection(ort.get_available_providers()))
         except ImportError:
-            has_cuda = False
+            pass
+        if not has_cuda:
             try:
-                import onnxruntime as ort
-                # onnxruntime-directml exposes the GPU via DirectML, not CUDA
-                gpu_providers = {"CUDAExecutionProvider", "DmlExecutionProvider", "TensorrtExecutionProvider"}
-                has_cuda = bool(gpu_providers.intersection(ort.get_available_providers()))
-            except ImportError:
-                has_cuda = False
+                import torch
+                has_cuda = bool(torch.cuda.is_available())
+            except (ImportError, AttributeError):
+                pass
 
         if device == "cuda" and not has_cuda:
             device = "cpu"
@@ -202,6 +207,7 @@ class DecoupledPipeline:
         # 4. Temporal Sequence Buffer & Kinematics
         temp_cfg = model_cfg.get("temporal", {})
         window_size = temp_cfg.get("window_size", 30)
+        self.window_size = window_size
         self.sequence_buffer = SequenceBuffer(window_size=window_size)
         self.feature_extractor = TemporalFeatureExtractor(fps=self.temporal_hz)
 
@@ -216,10 +222,15 @@ class DecoupledPipeline:
             device=temporal_device,
             architecture=temp_cfg.get("architecture", "tcn"),
         )
+        anom_cfg = model_cfg.get("anomaly", {})
         self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(
-            weights_path=model_cfg.get("anomaly", {}).get("weights_path", None),
+            weights_path=anom_cfg.get("weights_path", None),
+            threshold=anom_cfg.get("threshold", 0.22),
+            steepness=anom_cfg.get("steepness", 15.0),
             device=temporal_device,
         )
+        # Last autoencoder result per track, reused between the periodic evaluations
+        self._last_anomaly: Dict[int, AnomalyResult] = {}
         self.behavior_analyzer = BehaviorSequenceAnalyzer()
 
         # 6. Risk Engine & State Machine
@@ -251,7 +262,7 @@ class DecoupledPipeline:
             ground_proximity_thresh=0.22,
             area_change_thresh=0.32,
         )
-        self.iou_match_thresh = 0.70
+        self.iou_match_thresh = model_cfg.get("perception", {}).get("iou_match_thresh", 0.45)
         self._prev_raw_keypoints: Dict[int, np.ndarray] = {}
         self._prev_track_bboxes: Dict[int, Tuple[float, float, float, float]] = {}
 
@@ -369,6 +380,8 @@ class DecoupledPipeline:
             self.sequence_buffer.update_activity(active_track_ids)
             self.risk_engine.cleanup_inactive(active_track_ids)
             self.gated_trigger.cleanup_inactive(active_track_ids)
+            for dead in [t for t in self._last_anomaly if t not in active_track_ids]:
+                self._last_anomaly.pop(dead, None)
 
         # Cleanup translation offset buffers for dead tracks
         dead_tids = [tid for tid in self._prev_raw_keypoints if tid not in active_track_ids]
@@ -458,7 +471,9 @@ class DecoupledPipeline:
             tid = track.track_id
             snapshots_hist = self.sequence_buffer.get_snapshots(tid)
             if len(snapshots_hist) >= MIN_SNAPSHOTS_FOR_GATING:
-                seq = self.sequence_buffer.get_normalized_sequence(tid)
+                seq = build_model_sequence(
+                    np.stack([s.keypoints for s in snapshots_hist]), self.window_size
+                )
                 kinematics = self.feature_extractor.extract(snapshots_hist)
 
                 # Retrieve previous assessment state for hysteresis
@@ -473,13 +488,14 @@ class DecoupledPipeline:
                     current_state=curr_state,
                 )
 
-                if gate_res.should_run_ai:
+                # Upright warning signs (staggering, clutching head / chest) never trip the
+                # kinematic gate, so with enable_gated_ai off the tiny model runs every tick.
+                if gate_res.should_run_ai or not self.gated_ai:
                     # Tier 2: Deep AI Inference (Gate OPEN: Hard fall, slow slide, Z-axis fall, or hold-on timer)
-                    action_pred = self.action_classifier.predict(seq)
-                    if self._temporal_tick_count % self.anomaly_interval == 0:
-                        anomaly_res = self.anomaly_detector.score(seq)
-                    else:
-                        anomaly_res = AnomalyResult(0.05, False, 0.05, 0.35)
+                    action_pred = self.action_classifier.predict(seq, kinematics=kinematics)
+                    if self._temporal_tick_count % self.anomaly_interval == 0 or tid not in self._last_anomaly:
+                        self._last_anomaly[tid] = self.anomaly_detector.score(seq)
+                    anomaly_res = self._last_anomaly[tid]
                 else:
                     # Gate CLOSED: Normal walking/standing/sitting (~0 ms compute)
                     action_pred = gate_res.heuristic_prediction

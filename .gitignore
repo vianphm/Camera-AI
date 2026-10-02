@@ -58,6 +58,8 @@ data/processed/*
 !data/processed/.gitkeep
 datasets/*/*
 !datasets/*/.gitkeep
+tests/*.mp4
+tests/video_thumbnails/
 
 # Environment variables
 .env
@@ -85,3 +87,6 @@ results/
 !models/pose/rtmo-s.onnx
 !models/checkpoints/best_st_transformer.onnx
 !models/checkpoints/best_pose_autoencoder.onnx
+
+# Runtime log written next to app_runner.py
+app_log.txt

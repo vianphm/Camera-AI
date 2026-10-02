@@ -28,6 +28,8 @@ class RiskEngine:
     def __init__(self, thresholds: Optional[ThresholdManager] = None) -> None:
         self.thresholds = thresholds or ThresholdManager()
         self._state_machines: Dict[int, EventStateMachine] = {}
+        self.assessments: Dict[int, RiskAssessment] = {}
+        self._inactive_counts: Dict[int, int] = {}
 
     def assess(
         self,
@@ -65,21 +67,35 @@ class RiskEngine:
         s_kin = kinematics.drop_severity_score
 
         # 4. Immobility Signal: relevant especially if down/lying
-        s_immob = kinematics.immobility_index if (kinematics.aspect_ratio_curr > 0.9 or kinematics.torso_angle_curr > 50.0) else 0.0
+        is_down = (kinematics.aspect_ratio_curr > 0.90 or kinematics.torso_angle_curr > 50.0)
+        s_immob = kinematics.immobility_index if is_down else 0.0
 
-        # Fused raw score
+        # Base fused score
         fused_score = (
             w_act * s_action +
             w_anom * s_anomaly +
             w_kin * s_kin +
             w_immob * s_immob
         )
+
+        # 5. Synergistic Multi-Signal Escalation:
+        # A) Acute Fall: When physical drop AND emergency action mutually confirm each other
+        if s_kin >= 0.45 and s_action >= 0.45:
+            synergy = 0.50 * s_action + 0.50 * s_kin
+            fused_score = max(fused_score, synergy)
+
+        # B) Prolonged Immobility on Floor: When person remains down/lying with high immobility index
+        if is_down and s_immob >= 0.40:
+            immob_score = 0.45 * s_action + 0.40 * s_immob + 0.15 * s_anomaly
+            fused_score = max(fused_score, immob_score)
+
         risk_score = float(np.clip(fused_score, 0.0, 1.0))
 
         # Get or create track state machine
         if track_id not in self._state_machines:
             self._state_machines[track_id] = EventStateMachine(self.thresholds, initial_time=timestamp)
 
+        self._inactive_counts[track_id] = 0
         sm = self._state_machines[track_id]
         new_state, state_changed = sm.update(
             risk_score=risk_score,
@@ -102,7 +118,7 @@ class RiskEngine:
             "vertical_velocity": round(kinematics.vertical_velocity, 2),
         }
 
-        return RiskAssessment(
+        assessment = RiskAssessment(
             track_id=track_id,
             risk_score=risk_score,
             state=new_state.value,
@@ -110,9 +126,17 @@ class RiskEngine:
             should_alert=should_alert,
             evidence=evidence,
         )
+        self.assessments[track_id] = assessment
+        return assessment
 
     def cleanup_inactive(self, active_track_ids: Set[int]) -> None:
-        """Evict state machines for tracks that have left the scene."""
-        stale = [tid for tid in self._state_machines if tid not in active_track_ids]
-        for tid in stale:
-            self._state_machines.pop(tid, None)
+        """Evict state machines for tracks that have left the scene, with a grace period."""
+        for tid in list(self._state_machines.keys()):
+            if tid not in active_track_ids:
+                self._inactive_counts[tid] = self._inactive_counts.get(tid, 0) + 1
+                if self._inactive_counts[tid] > 45:  # ~1.5s - 3s grace buffer
+                    self._state_machines.pop(tid, None)
+                    self.assessments.pop(tid, None)
+                    self._inactive_counts.pop(tid, None)
+            else:
+                self._inactive_counts[tid] = 0

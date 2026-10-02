@@ -70,8 +70,14 @@ a = Analysis(
     noarchive=False,
 )
 
-# Lọc lần nữa sau Analysis (hook onnxruntime có thể tự thêm lại các DLL này)
-a.binaries = [b for b in a.binaries if Path(b[0]).name.lower() not in _EXCLUDED_ORT_DLLS]
+# Lọc lần nữa sau Analysis (hook onnxruntime có thể tự thêm lại các DLL này).
+# PyTorch (chỉ dùng để huấn luyện) có thể nằm trong .venv: DLL của nó (vd. torch\lib\cudnn64_9.dll)
+# bị kéo vào như dependency, tạo thư mục torch\ rỗng khiến `import torch` thành công nhưng thiếu torch.cuda.
+a.binaries = [
+    b for b in a.binaries
+    if Path(b[0]).name.lower() not in _EXCLUDED_ORT_DLLS
+    and Path(b[0]).parts[0].lower() not in ('torch', 'torchvision')
+]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 

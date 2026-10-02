@@ -13,6 +13,7 @@ from src.pose.pose_estimator import PoseEstimator, PoseResult, YOLOv8PoseEstimat
 from src.pose.pose_factory import create_pose_estimator
 from src.pose.keypoints import normalize_keypoints, compute_torso_angle
 from src.temporal.sequence_buffer import SequenceBuffer, TrackSnapshot
+from src.temporal.sequence_features import build_model_sequence
 from src.temporal.temporal_features import TemporalFeatureExtractor
 from src.temporal.gated_trigger import KinematicGatedTrigger
 from src.action.action_classifier import ActionClassifier
@@ -71,16 +72,21 @@ class RealtimePipeline:
         except Exception:
             infer_cfg = {}
 
+        # GPU = an onnxruntime GPU provider (DirectML in the app build) or a working torch CUDA.
+        # torch may be absent or partial in the packaged app, so any failure there means "no".
+        has_cuda = False
         try:
-            import torch
-            has_cuda = torch.cuda.is_available()
+            import onnxruntime as ort
+            gpu_providers = {"CUDAExecutionProvider", "DmlExecutionProvider", "TensorrtExecutionProvider"}
+            has_cuda = bool(gpu_providers.intersection(ort.get_available_providers()))
         except ImportError:
-            has_cuda = False
+            pass
+        if not has_cuda:
             try:
-                import onnxruntime as ort
-                has_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
-            except ImportError:
-                has_cuda = False
+                import torch
+                has_cuda = bool(torch.cuda.is_available())
+            except (ImportError, AttributeError):
+                pass
 
         dev = infer_cfg.get("runtime", {}).get("device", "cuda")
         if dev == "cuda" and not has_cuda:
@@ -128,6 +134,7 @@ class RealtimePipeline:
         # 4. Temporal Sequence Buffer & Kinematics
         temp_cfg = model_cfg.get("temporal", {})
         window_size = temp_cfg.get("window_size", 30)
+        self.window_size = window_size
         self.sequence_buffer = SequenceBuffer(window_size=window_size)
         self.feature_extractor = TemporalFeatureExtractor(fps=15.0)
 
@@ -137,8 +144,11 @@ class RealtimePipeline:
             device=self.device,
             architecture=temp_cfg.get("architecture", "tcn"),
         )
+        anom_cfg = model_cfg.get("anomaly", {})
         self.anomaly_detector = anomaly_detector or ReconstructionAnomalyScorer(
-            weights_path=model_cfg.get("anomaly", {}).get("weights_path", None),
+            weights_path=anom_cfg.get("weights_path", None),
+            threshold=anom_cfg.get("threshold", 0.22),
+            steepness=anom_cfg.get("steepness", 15.0),
             device=self.device,
         )
         self.behavior_analyzer = BehaviorSequenceAnalyzer()
@@ -165,7 +175,7 @@ class RealtimePipeline:
             periodic_check_interval=motion_cfg.get("periodic_check_interval", 45),
         )
         self.gated_trigger = KinematicGatedTrigger(hold_on_frames=45)
-        self.iou_match_thresh = 0.70
+        self.iou_match_thresh = model_cfg.get("perception", {}).get("iou_match_thresh", 0.45)
         self._prev_raw_keypoints: Dict[int, np.ndarray] = {}
         self._prev_track_bboxes: Dict[int, Tuple[float, float, float, float]] = {}
 
@@ -189,20 +199,20 @@ class RealtimePipeline:
         # STAGE 0: Tier-0 Motion Gating (Background Subtraction / Pixel Differencing)
         self.profiler.start("tier0_motion")
         has_active = bool(self.tracker.tracks) if hasattr(self.tracker, "tracks") else False
-        gate_res = self.motion_gater.evaluate(frame, has_active_tracks=has_active)
+        motion_gate_res = self.motion_gater.evaluate(frame, has_active_tracks=has_active)
         self.profiler.stop("tier0_motion")
 
         # Case 1: Throttled idle frame (reducing FPS to 10-15 FPS when room is static)
-        if gate_res.is_throttled_frame:
+        if motion_gate_res.is_throttled_frame:
             fps = self.profiler.fps
             telemetry = {
                 **self.profiler.get_summary(),
                 **self.resource_monitor.get_telemetry(),
                 "active_tracks_count": 0,
-                "tier0_status": gate_res.status,
-                "tier0_motion_ratio": gate_res.motion_ratio,
-                "tier0_cooldown": gate_res.cooldown_remaining,
-                "tier0_rationale": gate_res.rationale,
+                "tier0_status": motion_gate_res.status,
+                "tier0_motion_ratio": motion_gate_res.motion_ratio,
+                "tier0_cooldown": motion_gate_res.cooldown_remaining,
+                "tier0_rationale": motion_gate_res.rationale,
                 "ai_bypassed": True,
             }
             if self.visualizer:
@@ -225,16 +235,16 @@ class RealtimePipeline:
             )
 
         # Case 2: Static room (Gate CLOSED -> Completely bypass AI inference, 0% GPU load)
-        if not gate_res.should_run_ai:
+        if not motion_gate_res.should_run_ai:
             fps = self.profiler.fps
             telemetry = {
                 **self.profiler.get_summary(),
                 **self.resource_monitor.get_telemetry(),
                 "active_tracks_count": 0,
-                "tier0_status": gate_res.status,
-                "tier0_motion_ratio": gate_res.motion_ratio,
-                "tier0_cooldown": gate_res.cooldown_remaining,
-                "tier0_rationale": gate_res.rationale,
+                "tier0_status": motion_gate_res.status,
+                "tier0_motion_ratio": motion_gate_res.motion_ratio,
+                "tier0_cooldown": motion_gate_res.cooldown_remaining,
+                "tier0_rationale": motion_gate_res.rationale,
                 "ai_bypassed": True,
             }
 
@@ -362,7 +372,9 @@ class RealtimePipeline:
             # the critical first second of a fall.
             snapshots_hist = self.sequence_buffer.get_snapshots(tid)
             if len(snapshots_hist) >= 3:
-                seq = self.sequence_buffer.get_normalized_sequence(tid)
+                seq = build_model_sequence(
+                    np.stack([s.keypoints for s in snapshots_hist]), self.window_size
+                )
                 kinematics = self.feature_extractor.extract(snapshots_hist)
 
                 # Previous state for hysteresis
@@ -379,7 +391,7 @@ class RealtimePipeline:
 
                 if gate_res.should_run_ai:
                     # Tier 2: Deep AI inference (Supervised Action + Unsupervised Anomaly)
-                    action_pred = self.action_classifier.predict(seq)
+                    action_pred = self.action_classifier.predict(seq, kinematics=kinematics)
                     anomaly_res = self.anomaly_detector.score(seq)
                 else:
                     # Gate CLOSED: Heuristic fast path (~0 ms)
@@ -453,17 +465,17 @@ class RealtimePipeline:
             **self.profiler.get_summary(),
             **self.resource_monitor.get_telemetry(),
             "active_tracks_count": len(active_tracks),
-            "tier0_status": gate_res.status,
-            "tier0_motion_ratio": gate_res.motion_ratio,
-            "tier0_cooldown": gate_res.cooldown_remaining,
-            "tier0_rationale": gate_res.rationale,
+            "tier0_status": motion_gate_res.status,
+            "tier0_motion_ratio": motion_gate_res.motion_ratio,
+            "tier0_cooldown": motion_gate_res.cooldown_remaining,
+            "tier0_rationale": motion_gate_res.rationale,
             "ai_bypassed": False,
         }
         self.visualizer.draw_hud(
             frame=annotated_frame,
             fps=self.profiler.fps,
             active_tracks=len(active_tracks),
-            system_status=f"ONLINE ({gate_res.status})",
+            system_status=f"ONLINE ({motion_gate_res.status})",
             telemetry=telemetry,
         )
 

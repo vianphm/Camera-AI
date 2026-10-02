@@ -16,7 +16,7 @@ scheduling:
   pose_stride: 1            # Run single-pass pose + ByteTrack on every camera frame (~30 FPS multi-person tracking)
   temporal_hz: 15.0         # Fixed sampling rate for temporal AI / risk FSM (models & thresholds are calibrated at 15 Hz)
   action_stride: 2          # Run temporal AI every 2 frames (when Gated Trigger is OPEN)
-  enable_gated_ai: true     # Bypass AI on normal walking/standing/sitting
+  enable_gated_ai: false    # true = skip the action model while the kinematic gate is closed (saves ~1 ms/track); false keeps upright stroke warning signs (staggering, clutching head/chest) visible
 
 
 display:

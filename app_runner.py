@@ -255,6 +255,7 @@ def run_app():
         pipeline.alert_manager.dispatcher.subscribe_websocket(srv.broadcast_alert_event)
         with srv.state_lock:
             srv.pipeline_instance = pipeline
+            srv.external_ingestion_loop = True  # vòng lặp ở bước 7 tự đọc camera
     except Exception as e:
         print(f"[Warning] Đồng bộ WebSocket dispatcher: {e}")
 
@@ -320,13 +321,16 @@ def run_app():
     active_stream = stream
     try:
         while not stop_event.is_set():
-            # Kiểm tra trạng thái running từ Web Server (cho phép nút TẮT HỆ THỐNG ngắt vòng lặp)
+            # "DỪNG STREAM" chỉ tạm dừng camera (is_running = False): chờ người dùng bật lại.
+            # Nút TẮT HỆ THỐNG gọi /api/system/shutdown, endpoint đó tự thoát tiến trình.
             with srv.state_lock:
-                if not srv.is_running:
-                    print("[*] Nhận lệnh tắt từ Web API.")
-                    break
+                paused = not srv.is_running
                 if srv.camera_stream is not None:
                     active_stream = srv.camera_stream
+            if paused:
+                active_stream = None
+                time.sleep(0.05)
+                continue
 
             if active_stream is None or not active_stream.is_opened():
                 time.sleep(0.02)

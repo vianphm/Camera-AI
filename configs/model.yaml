@@ -2,7 +2,7 @@
 
 perception:
   single_pass: true                # Single-pass YOLO-Pose (BBox + Keypoints combined)
-  iou_match_thresh: 0.70           # Strict IoU matching threshold for track-to-keypoint pairing
+  iou_match_thresh: 0.45           # IoU matching threshold for track-to-keypoint pairing (supports fast posture changes)
   strictly_person_only: true       # Class 0 only
 
 detector:
@@ -76,3 +76,5 @@ anomaly:
   feature_dim: 51
   latent_dim: 64
   reconstruction_metric: "l1"
+  threshold: 0.3417                # L1 error at the p95 of held-out normal NTU windows (score 0.5)
+  steepness: 9.67                  # sigmoid slope: score 0.9 at the p99.5 normal error (training/train_anomaly.py)

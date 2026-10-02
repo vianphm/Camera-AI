@@ -43,6 +43,8 @@ state_lock = threading.Lock()
 pipeline_instance: Optional[RealtimePipeline] = None
 camera_stream: Optional[Any] = None
 is_running = False
+# True when app_runner.py drives camera reads itself; the server must not start a second loop
+external_ingestion_loop = False
 latest_annotated_frame: Optional[bytes] = None
 latest_frame_seq = 0  # Incremented on every newly encoded JPEG
 active_ws_clients: List[WebSocket] = []
@@ -370,11 +372,15 @@ def switch_camera(req: CameraSwitchRequest) -> Dict[str, Any]:
                 # Wire the alarm WebSocket broadcast so alerts from this
                 # freshly created pipeline still reach the frontend chime.
                 pipeline_instance.alert_manager.dispatcher.subscribe_websocket(broadcast_alert_event)
+            elif hasattr(pipeline_instance, "start") and not getattr(pipeline_instance, "_running", True):
+                # Resuming after /camera/stop, which stopped the AI worker thread
+                pipeline_instance.start()
 
-            # Ensure background worker is running
+            # Ensure background worker is running (the desktop app runs its own ingestion loop)
             if not is_running:
                 is_running = True
-                threading.Thread(target=_pipeline_worker_loop, daemon=True, name="PipelineWorker").start()
+                if not external_ingestion_loop:
+                    threading.Thread(target=_pipeline_worker_loop, daemon=True, name="PipelineWorker").start()
 
             res_str = f"{new_stream.get_width()}x{new_stream.get_height()}" if hasattr(new_stream, "get_width") else "1280x720"
 

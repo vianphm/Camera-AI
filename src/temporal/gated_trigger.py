@@ -158,7 +158,7 @@ class KinematicGatedTrigger:
 
         # 5. SUSTAINED RISK STATE (FSM Hysteresis):
         # If the person is already under investigation or potential fall, keep Gate open
-        if current_state in ["INVESTIGATING", "POTENTIAL_FALL", "HIGH_RISK", "ALERT_SENT"]:
+        if current_state in ["SUSPICIOUS", "ABNORMAL", "HIGH_RISK", "ALERT_SENT", "INVESTIGATING", "POTENTIAL_FALL"]:
             triggers.append(f"state_hysteresis({current_state})")
 
         # Check Gate Hold-on Timer

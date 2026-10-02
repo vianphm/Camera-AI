@@ -108,6 +108,24 @@ uvicorn src.api.server:app --host 0.0.0.0 --port 8000 --reload
 ```
 Open browser at: `http://localhost:8000/docs` for interactive Swagger API.
 
+### 5. Training the Temporal Models (NTU RGB+D 60)
+The action ST-Transformer and pose autoencoder are trained on the 2D (COCO-17) skeletons of
+[NTU RGB+D 60](https://rose1.ntu.edu.sg/dataset/actionRecognition/) released by MMAction2. Its medical
+classes cover visible warning signs of stroke and acute illness: falling, staggering (loss of balance),
+clutching the head, chest pain, nausea / vomiting.
+```powershell
+curl -L -o data\raw\ntu\ntu60_2d.pkl https://download.openmmlab.com/mmaction/v1.0/skeleton/data/ntu60_2d.pkl
+.venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cu124
+.venv\Scripts\python.exe training\prepare_ntu.py      # -> data\processed\ntu_windows.npz
+.venv\Scripts\python.exe training\train_action.py     # -> models\checkpoints\best_st_transformer.onnx + metrics json
+.venv\Scripts\python.exe training\train_anomaly.py    # -> best_pose_autoencoder.onnx + calibration json (copy into configs\model.yaml)
+```
+Cross-subject validation (people unseen in training), current checkpoint: accuracy 0.90, macro-F1 0.86;
+recall falling 0.99, staggering 0.82, clutching head / chest / nausea 0.89. NTU has no lying / immobile
+class, so those are built from post-fall frames and rotated poses and are weaker (F1 ≈ 0.6).
+The autoencoder does not separate abnormal from normal movement on NTU (AUROC ≈ 0.5); keep its risk weight low.
+There is no public video dataset of real strokes: the system flags observable warning signs and never diagnoses.
+
 ---
 
 ## Documentation Links
@@ -139,3 +157,5 @@ This program will not transfer any information to other networked systems unless
 ## License
 
 [MIT](LICENSE). Bundled model weights keep their original licenses: RTMO-s pose model from [OpenMMLab MMPose](https://github.com/open-mmlab/mmpose) (Apache-2.0).
+The temporal models (`best_st_transformer.onnx`, `best_pose_autoencoder.onnx`) are trained on NTU RGB+D, which is
+released for **non-commercial research use only**; these weights inherit that restriction.

@@ -118,8 +118,10 @@ class ReconstructionAnomalyScorer(AnomalyDetector):
         weights_path: Optional[Union[str, Path]] = None,
         threshold: float = 0.22,
         device: str = "cuda",
+        steepness: float = 15.0,
     ) -> None:
         self.threshold = threshold
+        self.steepness = steepness
         self.has_weights = False
         self.ort_session = None
         self.is_onnx = False
@@ -200,8 +202,8 @@ class ReconstructionAnomalyScorer(AnomalyDetector):
             error = self._heuristic_anomaly_error(sequence)
 
         # Sigmoid scaling around baseline threshold
-        k = 15.0  # steepness
-        anomaly_score = float(1.0 / (1.0 + np.exp(-k * (error - self.threshold))))
+        # Sigmoid calibrated so 0.5 sits at the p95 normal error (see training/train_anomaly.py)
+        anomaly_score = float(1.0 / (1.0 + np.exp(-self.steepness * (error - self.threshold))))
         is_anomaly = anomaly_score > 0.65
 
         return AnomalyResult(

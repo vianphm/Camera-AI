@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hướng Dẫn Sử Dụng — Fall & Stroke Warning System</title>
+  <meta name="description" content="Hướng dẫn chi tiết từ A đến Z: cài đặt, kết nối webcam và camera IP, chạy giám sát, nhận cảnh báo Telegram, bật tắt và xử lý sự cố cho Hệ thống Cảnh báo Ngã & Đột quỵ.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400&family=Outfit:wght@200;300;400&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="logo.png">
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --accent-cyan: #0284c7;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --bg-surface: #f1f5f9;
+      --border-subtle: rgba(226, 232, 240, 0.95);
+      --text: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --green: #059669;
+      --green-bg: #ecfdf5;
+      --amber: #b45309;
+      --amber-bg: #fffbeb;
+      --red: #dc2626;
+      --red-bg: #fef2f2;
+      --radius-sm: 10px;
+      --radius-md: 16px;
+      --radius-lg: 24px;
+      --radius-pill: 9999px;
+      --shadow-sm: 0 2px 8px rgba(100, 116, 139, 0.06);
+      --shadow-card: 0 10px 30px -4px rgba(100, 116, 139, 0.08), 0 2px 6px -1px rgba(100, 116, 139, 0.04);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 92px; }
+    body {
+      font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 300;
+      background-color: var(--bg-page);
+      background-image:
+        radial-gradient(at 10% 8%, rgba(224, 231, 255, 0.65) 0px, transparent 48%),
+        radial-gradient(at 90% 12%, rgba(224, 242, 254, 0.7) 0px, transparent 48%),
+        linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      background-attachment: fixed;
+      color: var(--text);
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+    h1, h2, h3, h4, strong, b { font-weight: 400; }
+    a { color: var(--primary); }
+    code, kbd {
+      font-family: 'Cascadia Code', Consolas, 'Courier New', monospace;
+      font-size: 0.9em;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 1px 6px;
+      word-break: break-all;
+    }
+    kbd { box-shadow: inset 0 -1px 0 var(--border-subtle); white-space: nowrap; }
+
+    /* NAV */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 16px;
+    }
+    .nav-inner {
+      max-width: 1200px; margin: 0 auto; height: 72px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .nav-brand {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; color: var(--text); font-size: 1.2rem; min-width: 0;
+    }
+    .nav-brand img { width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; }
+    .nav-brand span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nav-actions { display: flex; gap: 10px; flex-shrink: 0; }
+    .nav-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 18px; border-radius: var(--radius-pill);
+      text-decoration: none; font-size: 0.98rem;
+      border: 1px solid var(--border-subtle); background: #fff; color: var(--text);
+      transition: all 0.2s ease;
+    }
+    .nav-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+    .nav-btn.primary { background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%); color: #fff; border-color: transparent; }
+    .nav-btn.primary:hover { color: #fff; filter: brightness(1.08); }
+
+    /* HERO */
+    .hero { padding: 132px 16px 40px; text-align: center; }
+    .hero-badge {
+      display: inline-block; padding: 6px 16px; border-radius: var(--radius-pill);
+      background: var(--primary-light); color: var(--primary); font-size: 0.95rem; margin-bottom: 18px;
+    }
+    .hero h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 300; line-height: 1.2; letter-spacing: -0.5px; }
+    .hero p { max-width: 720px; margin: 16px auto 0; color: var(--text-secondary); font-size: 1.12rem; }
+    .lang-note {
+      display: none; max-width: 720px; margin: 18px auto 0; padding: 10px 16px;
+      border-radius: var(--radius-sm); background: var(--amber-bg); color: var(--amber); font-size: 0.95rem;
+    }
+    [data-lang="en"] .lang-note { display: block; }
+
+    /* LAYOUT */
+    .layout {
+      max-width: 1200px; margin: 0 auto; padding: 0 16px 80px;
+      display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 36px; align-items: start;
+    }
+    .toc {
+      position: sticky; top: 96px;
+      background: var(--bg-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md); padding: 18px; box-shadow: var(--shadow-sm);
+      max-height: calc(100vh - 120px); overflow-y: auto;
+    }
+    .toc-title { font-size: 0.85rem; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 10px; }
+    .toc ol { list-style: none; counter-reset: toc; }
+    .toc li { counter-increment: toc; }
+    .toc a {
+      display: flex; gap: 10px; padding: 7px 10px; border-radius: 8px;
+      text-decoration: none; color: var(--text-secondary); font-size: 0.97rem; line-height: 1.35;
+    }
+    .toc a::before { content: counter(toc); color: var(--primary); min-width: 18px; }
+    .toc a:hover, .toc a.active { background: var(--primary-light); color: var(--primary); }
+
+    /* SECTIONS */
+    main { min-width: 0; }
+    section.step {
+      background: var(--bg-card); border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+      padding: 34px 36px; margin-bottom: 26px;
+    }
+    .step-head { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+    .step-num {
+      flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px;
+      display: grid; place-items: center; font-size: 1.25rem; color: #fff;
+      background: linear-gradient(135deg, #2563eb 0%, #0284c7 100%);
+    }
+    .step-head h2 { font-size: 1.6rem; font-weight: 300; line-height: 1.25; }
+    section.step h3 { font-size: 1.18rem; margin: 26px 0 10px; color: var(--text); }
+    section.step p { color: var(--text-secondary); margin: 10px 0; }
+    section.step ul, section.step ol.steps { margin: 10px 0 10px 4px; padding-left: 22px; color: var(--text-secondary); }
+    section.step li { margin: 7px 0; }
+    ol.steps li::marker { color: var(--primary); }
+    .ui { color: var(--primary); background: var(--primary-light); border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+
+    /* CALLOUTS */
+    .callout {
+      display: flex; gap: 14px; padding: 16px 18px; border-radius: var(--radius-md);
+      margin: 18px 0; font-size: 1rem; line-height: 1.6;
+    }
+    .callout .ico { font-size: 1.3rem; line-height: 1.3; flex-shrink: 0; }
+    .callout.info { background: var(--primary-light); color: #1e3a8a; }
+    .callout.tip { background: var(--green-bg); color: #065f46; }
+    .callout.warn { background: var(--amber-bg); color: #78350f; }
+    .callout.danger { background: var(--red-bg); color: #7f1d1d; }
+
+    /* TABLES */
+    .table-wrap { overflow-x: auto; margin: 14px 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.98rem; min-width: 520px; }
+    th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+    th { background: var(--bg-surface); font-weight: 400; color: var(--text); }
+    td { color: var(--text-secondary); }
+    tr:last-child td { border-bottom: none; }
+
+    .state-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: -1px; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 14px 0; }
+    .mini-card { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 18px; background: var(--bg-page); }
+    .mini-card h4 { font-size: 1.05rem; margin-bottom: 6px; }
+    .mini-card p { margin: 0; font-size: 0.97rem; }
+
+    details {
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+      padding: 0 16px; margin: 10px 0; background: var(--bg-page);
+    }
+    details[open] { padding-bottom: 12px; }
+    summary { cursor: pointer; padding: 13px 0; color: var(--text); list-style: none; display: flex; gap: 10px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::before { content: "›"; color: var(--primary); transition: transform 0.2s; display: inline-block; }
+    details[open] summary::before { transform: rotate(90deg); }
+
+    footer { text-align: center; padding: 30px 16px 40px; color: var(--text-muted); font-size: 0.95rem; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      .toc { position: static; max-height: none; }
+    }
+    @media (max-width: 600px) {
+      .nav-brand span { display: none; }
+      .nav-btn { padding: 8px 14px; font-size: 0.92rem; }
+      .hero { padding-top: 112px; }
+      section.step { padding: 24px 18px; border-radius: var(--radius-md); }
+      .step-head h2 { font-size: 1.32rem; }
+      .grid-2 { grid-template-columns: minmax(0, 1fr); }
+      .ui, kbd { white-space: normal; }
+    }
+  </style>
+</head>
+<body data-lang="vi">
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-brand">
+      <img src="logo.png" alt="Logo Fall and Stroke Warning System">
+      <span>Fall & Stroke Warning</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-btn">← Trang chủ</a>
+      <a href="https://github.com/QuocCuong66/Project-monitoring-model/releases/latest/download/Fall_and_Stroke_Warning_System_Setup.exe" class="nav-btn primary">Tải về</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <span class="hero-badge">📘 Hướng dẫn sử dụng</span>
+  <h1>Từ cài đặt đến giám sát 24/7</h1>
+  <p>Làm lần lượt từng bước dưới đây: cài phần mềm, kết nối camera, chạy giám sát, nhận cảnh báo qua Telegram, bật/tắt hệ thống và xử lý khi gặp sự cố.</p>
+  <p class="lang-note">This guide is available in Vietnamese only.</p>
+</header>
+
+<div class="layout">
+  <aside class="toc" aria-label="Mục lục">
+    <div class="toc-title">MỤC LỤC</div>
+    <ol>
+      <li><a href="#chuan-bi">Chuẩn bị</a></li>
+      <li><a href="#cai-dat">Tải và cài đặt</a></li>
+      <li><a href="#khoi-dong">Khởi động lần đầu</a></li>
+      <li><a href="#giao-dien">Làm quen giao diện</a></li>
+      <li><a href="#webcam">Kết nối webcam</a></li>
+      <li><a href="#camera-ip">Kết nối camera IP</a></li>
+      <li><a href="#lap-dat">Đặt camera đúng cách</a></li>
+      <li><a href="#giam-sat">Theo dõi giám sát</a></li>
+      <li><a href="#canh-bao">Khi có cảnh báo</a></li>
+      <li><a href="#telegram">Cảnh báo qua Telegram</a></li>
+      <li><a href="#bat-tat">Bật, tạm dừng và tắt</a></li>
+      <li><a href="#tu-dong">Tự chạy cùng Windows</a></li>
+      <li><a href="#may-khac">Xem từ máy khác</a></li>
+      <li><a href="#rieng-tu">Quyền riêng tư</a></li>
+      <li><a href="#su-co">Xử lý sự cố</a></li>
+      <li><a href="#go-cai-dat">Gỡ cài đặt</a></li>
+    </ol>
+  </aside>
+
+  <main>
+
+    <!-- 1 -->
+    <section class="step" id="chuan-bi">
+      <div class="step-head"><span class="step-num">1</span><h2>Chuẩn bị</h2></div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Thành phần</th><th>Yêu cầu</th></tr>
+          <tr><td>Hệ điều hành</td><td>Windows 10 hoặc Windows 11 (64-bit)</td></tr>
+          <tr><td>Máy tính</td><td>CPU Intel Core i5 thế hệ 8 / AMD Ryzen 5 trở lên, RAM tối thiểu 8 GB (khuyến nghị 16 GB)</td></tr>
+          <tr><td>Card đồ họa</td><td>Không bắt buộc. Có card NVIDIA, AMD hoặc Intel hỗ trợ DirectX 12 thì AI chạy nhanh hơn nhiều</td></tr>
+          <tr><td>Camera</td><td>Webcam của laptop, webcam USB, hoặc camera an ninh IP có hỗ trợ RTSP (Hikvision, Dahua/Imou, Yoosee, TP-Link Tapo, EZVIZ…)</td></tr>
+          <tr><td>Ổ cứng</td><td>Khoảng 450 MB trống</td></tr>
+          <tr><td>Internet</td><td>Chỉ cần lúc tải phần mềm và khi muốn gửi cảnh báo qua Telegram. Phần nhận diện AI chạy hoàn toàn trên máy</td></tr>
+        </table>
+      </div>
+      <div class="callout tip"><span class="ico">💡</span><div>Nên để máy tính giám sát <b>luôn cắm sạc</b> và tắt chế độ ngủ (Sleep) trong <i>Settings → System → Power</i>. Laptop chạy pin sẽ bị giới hạn hiệu năng card đồ họa, làm AI chậm hơn.</div></div>
+    </section>
+
+    <!-- 2 -->
+    <section class="step" id="cai-dat">
+      <div class="step-head"><span class="step-num">2</span><h2>Tải và cài đặt</h2></div>
+      <ol class="steps">
+        <li>Bấm nút <span class="ui">Tải về</span> ở góc trên trang để tải tệp <code>Fall_and_Stroke_Warning_System_Setup.exe</code>.</li>
+        <li>Mở thư mục <b>Downloads</b> và nhấp đúp vào tệp vừa tải.</li>
+        <li>Nếu Windows hiện màn hình xanh <b>“Windows protected your PC”</b>: bấm <span class="ui">More info</span> (Thông tin thêm) rồi bấm <span class="ui">Run anyway</span> (Vẫn chạy).</li>
+        <li>Chọn ngôn ngữ cho trình cài đặt (Tiếng Việt hoặc English).</li>
+        <li>Ở bước chọn tác vụ bổ sung:
+          <ul>
+            <li>Tích <b>Tạo biểu tượng trên Màn hình chính (Desktop)</b> để mở ứng dụng nhanh.</li>
+            <li>Tích <b>Tự động chạy bảo vệ khi khởi động Windows</b> nếu máy này dùng để giám sát 24/7 (có thể bật/tắt lại sau trong phần Cài đặt).</li>
+          </ul>
+        </li>
+        <li>Bấm <span class="ui">Install</span> và chờ khoảng 1 phút.</li>
+        <li>Ở màn hình cuối, giữ dấu tích <b>Mở Fall and Stroke Warning System ngay</b> rồi bấm <span class="ui">Finish</span>.</li>
+      </ol>
+      <div class="callout info"><span class="ico">ℹ️</span><div>Phần mềm cài vào <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System</code>, không cần quyền quản trị. Bạn <b>không</b> cần cài Python hay bất kỳ phần mềm nào khác.</div></div>
+      <details>
+        <summary>Vì sao Windows hiện cảnh báo khi cài?</summary>
+        <p>Phần mềm mã nguồn mở này chưa có chữ ký số doanh nghiệp, nên Windows SmartScreen cảnh báo với mọi tệp tải từ Internet chưa đủ “uy tín”. Đây không phải dấu hiệu virus. Nếu máy dùng <b>Smart App Control</b> (Windows 11 cài mới) và không có nút <i>Run anyway</i>, xem mục <a href="#su-co">Xử lý sự cố</a>.</p>
+      </details>
+    </section>
+
+    <!-- 3 -->
+    <section class="step" id="khoi-dong">
+      <div class="step-head"><span class="step-num">3</span><h2>Khởi động lần đầu</h2></div>
+      <ol class="steps">
+        <li>Nhấp đúp biểu tượng <b>Fall and Stroke Warning System</b> trên Desktop (hoặc tìm trong menu Start).</li>
+        <li>Chờ <b>10–30 giây</b> để hệ thống nạp mô hình AI. Ứng dụng chạy ngầm nên <b>không</b> có cửa sổ đen hiện ra, đây là bình thường.</li>
+        <li>Cửa sổ giao diện tự mở. Nếu sau 1 phút vẫn không thấy, mở trình duyệt và vào <code>http://localhost:8000</code>.</li>
+        <li>Nếu Windows hỏi <b>cho phép truy cập mạng</b> (Windows Defender Firewall): bấm <span class="ui">Allow</span>. Cần bước này nếu muốn xem từ điện thoại hoặc máy khác.</li>
+        <li>Nếu Windows hỏi <b>quyền dùng camera</b>: bấm <span class="ui">Yes / Cho phép</span>.</li>
+      </ol>
+      <div class="callout tip"><span class="ico">✅</span><div>Ứng dụng tự bật <b>Webcam 0</b> (webcam mặc định của máy). Nếu thấy hình ảnh trực tiếp trong khung <b>CAMERA 01</b> là hệ thống đã sẵn sàng.</div></div>
+    </section>
+
+    <!-- 4 -->
+    <section class="step" id="giao-dien">
+      <div class="step-head"><span class="step-num">4</span><h2>Làm quen giao diện</h2></div>
+      <p>Thanh bên trái gồm các mục:</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Mục</th><th>Chức năng</th></tr>
+          <tr><td>🏠 Tổng quan</td><td>Màn hình chính: video trực tiếp, cảnh báo mới nhất, thống kê nhanh</td></tr>
+          <tr><td>📹 Video trực tiếp</td><td>Khung camera lớn với khung xương người và trạng thái nguy cơ</td></tr>
+          <tr><td>🕒 Lịch sử cảnh báo</td><td>Danh sách các lần phát hiện bất thường kèm thời gian và ảnh chụp</td></tr>
+          <tr><td>📊 Thống kê</td><td>Số người đang theo dõi, tốc độ khung hình (FPS), tình trạng hệ thống</td></tr>
+          <tr><td>⚙️ Cài đặt</td><td>Tự chạy cùng Windows, kiểm tra camera, làm mờ mặt, Telegram, tắt hệ thống</td></tr>
+        </table>
+      </div>
+      <p>Trên khung camera có nút <span class="ui">•••</span> (Tùy chọn Camera &amp; Thiết bị). Mọi thao tác đổi nguồn camera, chụp ảnh, toàn màn hình, dừng/bật luồng đều nằm ở đây.</p>
+    </section>
+
+    <!-- 5 -->
+    <section class="step" id="webcam">
+      <div class="step-head"><span class="step-num">5</span><h2>Kết nối webcam (tích hợp hoặc USB)</h2></div>
+      <ol class="steps">
+        <li>Cắm webcam USB vào máy (bỏ qua nếu dùng webcam của laptop).</li>
+        <li>Trên khung camera, bấm <span class="ui">•••</span>, tìm phần <b>CẤU HÌNH NGUỒN CAMERA</b>.</li>
+        <li>Ở <b>Loại Nguồn</b>, chọn <span class="ui">📷 Webcam Tích hợp / USB</span>.</li>
+        <li>Bấm <span class="ui">Quét</span> để tìm các webcam đang cắm, rồi chọn webcam trong ô <b>Chọn Webcam</b>. Webcam 0 thường là webcam laptop, webcam USB thường là Webcam 1.</li>
+        <li>Bấm <span class="ui">ÁP DỤNG CAMERA</span> và chờ vài giây để hình hiện lên.</li>
+        <li>Bấm <span class="ui">LƯU MẶC ĐỊNH</span> để lần sau mở ứng dụng sẽ tự dùng camera này.</li>
+      </ol>
+      <div class="callout warn"><span class="ico">⚠️</span><div>Mỗi webcam chỉ một chương trình dùng được tại một thời điểm. Hãy tắt Zoom, Teams, Zalo gọi video, ứng dụng Camera của Windows… trước khi kết nối.</div></div>
+    </section>
+
+    <!-- 6 -->
+    <section class="step" id="camera-ip">
+      <div class="step-head"><span class="step-num">6</span><h2>Kết nối camera IP an ninh (RTSP)</h2></div>
+      <p>Camera IP gắn tường, gắn trần cho góc nhìn bao quát hơn webcam. Máy tính và camera phải <b>cùng mạng Wi-Fi / mạng nội bộ</b>.</p>
+
+      <h3>Bước A — Lấy thông tin camera</h3>
+      <ul>
+        <li><b>Địa chỉ IP</b> của camera: xem trong ứng dụng điện thoại của hãng (mục thông tin thiết bị) hoặc trong trang quản trị modem/router (danh sách thiết bị đã kết nối). Ví dụ: <code>192.168.1.100</code>.</li>
+        <li><b>Tên đăng nhập và mật khẩu</b> của camera (không phải mật khẩu tài khoản app).</li>
+        <li>Đảm bảo <b>RTSP / ONVIF đã được bật</b> trong cài đặt camera.</li>
+      </ul>
+
+      <h3>Bước B — Nhập vào ứng dụng</h3>
+      <ol class="steps">
+        <li>Bấm <span class="ui">•••</span> trên khung camera.</li>
+        <li><b>Loại Nguồn</b>: chọn <span class="ui">🌐 Camera IP An Ninh (RTSP)</span>.</li>
+        <li><b>Hãng Camera</b>: chọn đúng hãng. Ô <b>Đường dẫn RTSP Stream</b> sẽ tự điền mẫu.</li>
+        <li>Sửa đường dẫn: thay tên đăng nhập, mật khẩu và địa chỉ IP bằng thông tin thật của camera.</li>
+        <li>Bấm <span class="ui">ÁP DỤNG CAMERA</span>. Có hình là kết nối thành công, sau đó bấm <span class="ui">LƯU MẶC ĐỊNH</span>.</li>
+      </ol>
+
+      <h3>Mẫu đường dẫn theo hãng</h3>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Hãng</th><th>Đường dẫn mẫu</th><th>Ghi chú</th></tr>
+          <tr><td>Hikvision</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/Streaming/Channels/101</code></td><td>101 = luồng chính, 102 = luồng phụ (nhẹ hơn)</td></tr>
+          <tr><td>Dahua / Imou</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/cam/realmonitor?channel=1&amp;subtype=0</code></td><td>subtype=1 là luồng phụ</td></tr>
+          <tr><td>Yoosee</td><td><code>rtsp://admin:MATKHAU@192.168.1.100:554/onvif1</code></td><td>Mật khẩu là mật khẩu thiết bị đặt trong app Yoosee</td></tr>
+          <tr><td>TP-Link Tapo</td><td><code>rtsp://TAIKHOAN:MATKHAU@192.168.1.100:554/stream1</code></td><td>Tạo “Tài khoản camera” trong app Tapo: Cài đặt nâng cao → Tài khoản camera. stream2 là luồng phụ</td></tr>
+          <tr><td>EZVIZ</td><td><code>rtsp://admin:MAXACMINH@192.168.1.100:554/h264/ch1/main/av_stream</code></td><td>Mật khẩu là mã xác minh 6 chữ in hoa trên tem dán dưới camera</td></tr>
+        </table>
+      </div>
+      <div class="callout tip"><span class="ico">💡</span><div>Nếu mật khẩu có ký tự đặc biệt như <code>@ # : /</code>, hãy đổi mật khẩu camera sang chỉ gồm chữ và số để tránh lỗi đường dẫn.</div></div>
+
+      <h3>Thử bằng video mẫu (không cần camera)</h3>
+      <p>Chọn <b>Loại Nguồn</b> là <span class="ui">🎬 Tệp Video Kiểm Thử (MP4)</span> để chạy thử hệ thống bằng một tệp video có sẵn trên máy.</p>
+    </section>
+
+    <!-- 7 -->
+    <section class="step" id="lap-dat">
+      <div class="step-head"><span class="step-num">7</span><h2>Đặt camera đúng cách để AI nhận diện chính xác</h2></div>
+      <div class="grid-2">
+        <div class="mini-card"><h4>📐 Độ cao 2–2,5 m, chếch xuống</h4><p>Nhìn bao quát cả sàn nhà, vì người ngã sẽ nằm trên sàn.</p></div>
+        <div class="mini-card"><h4>🧍 Thấy được toàn thân</h4><p>Khung hình nên chứa trọn người từ đầu đến chân ở khu vực hay đi lại.</p></div>
+        <div class="mini-card"><h4>💡 Đủ sáng, không ngược sáng</h4><p>Tránh hướng camera thẳng vào cửa sổ. Ban đêm dùng camera có hồng ngoại hoặc để đèn ngủ.</p></div>
+        <div class="mini-card"><h4>🚧 Ít vật che khuất</h4><p>Hạn chế bàn ghế, lan can che phần thân dưới. Mỗi phòng cần giám sát nên có một camera riêng.</p></div>
+      </div>
+      <p>Ưu tiên các khu vực dễ xảy ra ngã: phòng ngủ, lối đi tới nhà vệ sinh, phòng khách, cầu thang.</p>
+    </section>
+
+    <!-- 8 -->
+    <section class="step" id="giam-sat">
+      <div class="step-head"><span class="step-num">8</span><h2>Theo dõi giám sát</h2></div>
+      <p>Khi đang chạy, mỗi người trong khung hình được vẽ <b>khung xương</b> và một <b>thẻ trạng thái</b>. Màu cho biết mức nguy cơ:</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Màu</th><th>Trạng thái</th><th>Ý nghĩa</th></tr>
+          <tr><td><span class="state-dot" style="background:#00c800"></span>Xanh lá</td><td>NORMAL</td><td>Sinh hoạt bình thường: đi, đứng, ngồi, cúi nhặt đồ</td></tr>
+          <tr><td><span class="state-dot" style="background:#ffd700"></span>Vàng</td><td>SUSPICIOUS</td><td>Có dấu hiệu cần chú ý (loạng choạng, tư thế lạ)</td></tr>
+          <tr><td><span class="state-dot" style="background:#ff8c00"></span>Cam</td><td>ABNORMAL</td><td>Nghi ngã hoặc biểu hiện bất thường kéo dài</td></tr>
+          <tr><td><span class="state-dot" style="background:#f00000"></span>Đỏ</td><td>HIGH RISK / ALERT</td><td>Nguy cơ cao, hệ thống phát cảnh báo; khung video có viền đỏ</td></tr>
+        </table>
+      </div>
+      <p>Hệ thống theo dõi các dấu hiệu nhìn thấy được qua camera: <b>ngã đột ngột, nằm bất động trên sàn, loạng choạng mất thăng bằng, ôm đầu, ôm ngực, nôn ói</b>.</p>
+      <h3>Các nút dưới khung video</h3>
+      <ul>
+        <li>⏯ <b>Tạm dừng / Tiếp tục</b> luồng video.</li>
+        <li>🔊 <b>Bật / Tắt âm thanh</b> chuông cảnh báo trên máy tính.</li>
+        <li>📷 <b>Chụp ảnh nhanh</b> màn hình hiện tại.</li>
+        <li>⛶ <b>Phóng to toàn màn hình</b>.</li>
+      </ul>
+      <div class="callout warn"><span class="ico">🔊</span><div>Nên để <b>bật âm thanh</b> và loa máy tính ở mức nghe rõ, để người trong nhà nghe được chuông khi có cảnh báo.</div></div>
+    </section>
+
+    <!-- 9 -->
+    <section class="step" id="canh-bao">
+      <div class="step-head"><span class="step-num">9</span><h2>Khi có cảnh báo</h2></div>
+      <ol class="steps">
+        <li>Thanh đỏ <b>“PHÁT HIỆN HÀNH VI BẤT THƯỜNG / NGUY CƠ TÉ NGÃ!”</b> hiện trên đầu màn hình kèm chuông báo. Nếu đã cài Telegram, điện thoại cũng nhận tin nhắn kèm ảnh.</li>
+        <li><b>Kiểm tra người thân ngay lập tức</b>: đến tận nơi hoặc gọi điện.</li>
+        <li>Sau khi đã kiểm tra, bấm <span class="ui">ĐÃ XÁC NHẬN (DISMISS)</span> để tắt cảnh báo.</li>
+        <li>Ở thẻ <b>CẢNH BÁO TÉ NGÃ</b>: bấm <span class="ui">Xử lý</span> để đánh dấu sự việc đã giải quyết, hoặc <span class="ui">Xem chi tiết</span> để xem trong lịch sử cảnh báo.</li>
+      </ol>
+      <div class="callout danger"><span class="ico">🚑</span><div><b>Phần mềm chỉ hỗ trợ cảnh báo, không chẩn đoán bệnh.</b> Tin nhắn luôn là: <i>“Possible medical emergency / abnormal behavior detected. Please check the person.”</i> (Có thể có tình huống khẩn cấp, hãy kiểm tra người thân). Nếu nghi ngờ đột quỵ (méo miệng, yếu nửa người, nói khó) hoặc chấn thương nặng, <b>gọi cấp cứu 115 ngay</b>.</div></div>
+      <p>Ảnh chụp lúc xảy ra sự việc được lưu trên máy tại thư mục cài đặt, mục <code>data\processed\events</code>.</p>
+    </section>
+
+    <!-- 10 -->
+    <section class="step" id="telegram">
+      <div class="step-head"><span class="step-num">10</span><h2>Nhận cảnh báo qua Telegram trên điện thoại</h2></div>
+      <p>Để nhận tin ngay cả khi không ở gần máy tính, cài ứng dụng <b>Telegram</b> trên điện thoại, sau đó:</p>
+      <ol class="steps">
+        <li>Mở Telegram, tìm <b>@BotFather</b>, gửi lệnh <code>/newbot</code> và đặt tên cho bot (ví dụ: <i>Canh bao nha ba</i>).</li>
+        <li>BotFather gửi về một <b>Bot Token</b> dạng <code>123456789:AAH...</code>. Sao chép đoạn này.</li>
+        <li>Trên ứng dụng giám sát, mở <span class="ui">⚙️ Cài đặt</span> → mục <b>📱 Thông báo qua Telegram</b>, dán vào ô <b>Bot Token</b>.</li>
+        <li>Trên Telegram, mở bot vừa tạo và bấm <span class="ui">Start</span>. Muốn cả nhà cùng nhận: thêm bot vào nhóm gia đình rồi nhắn một tin bất kỳ trong nhóm.</li>
+        <li>Quay lại ứng dụng, bấm <span class="ui">🔎 Lấy Chat ID tự động</span>. Ô <b>Chat ID</b> sẽ tự điền.</li>
+        <li>Bật công tắc Telegram, bấm <span class="ui">💾 Lưu cài đặt</span>.</li>
+        <li>Bấm <span class="ui">📨 Gửi tin thử</span>. Điện thoại nhận được tin là đã cài xong.</li>
+      </ol>
+      <div class="callout info"><span class="ico">🌐</span><div>Gửi Telegram cần máy tính có Internet. Mọi phân tích hình ảnh vẫn diễn ra trên máy, hệ thống chỉ gửi tin cảnh báo tới bot của bạn.</div></div>
+    </section>
+
+    <!-- 11 -->
+    <section class="step" id="bat-tat">
+      <div class="step-head"><span class="step-num">11</span><h2>Bật, tạm dừng và tắt hệ thống</h2></div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Muốn…</th><th>Thao tác</th></tr>
+          <tr><td><b>Bật</b> hệ thống</td><td>Nhấp đúp biểu tượng ứng dụng trên Desktop / menu Start</td></tr>
+          <tr><td><b>Tạm dừng</b> camera (vẫn giữ ứng dụng chạy)</td><td>Bấm <span class="ui">•••</span> → <span class="ui">⏹️ DỪNG STREAM</span></td></tr>
+          <tr><td><b>Bật lại</b> camera</td><td>Bấm <span class="ui">BẬT CAMERA STREAM</span> giữa khung video, hoặc <span class="ui">•••</span> → <span class="ui">ÁP DỤNG CAMERA</span></td></tr>
+          <tr><td>Video bị đứng hình</td><td>Bấm <span class="ui">•••</span> → <span class="ui">🔄 Tải lại luồng</span></td></tr>
+          <tr><td><b>Đóng cửa sổ</b> nhưng vẫn giám sát</td><td>Bấm nút <kbd>✕</kbd> của cửa sổ. Hệ thống <b>vẫn chạy ngầm</b> và vẫn gửi cảnh báo Telegram</td></tr>
+          <tr><td><b>Mở lại giao diện</b> khi đang chạy ngầm</td><td>Mở trình duyệt, vào <code>http://localhost:8000</code></td></tr>
+          <tr><td><b>Tắt hẳn</b> hệ thống</td><td><span class="ui">⚙️ Cài đặt</span> → <b>🛑 Dừng hoạt động hệ thống</b> → <span class="ui">TẮT HỆ THỐNG</span></td></tr>
+        </table>
+      </div>
+      <div class="callout warn"><span class="ico">⚠️</span><div>Đóng cửa sổ <b>không</b> tắt hệ thống. Khi muốn tắt hẳn (ví dụ để dùng webcam cho cuộc gọi video), hãy dùng nút <b>TẮT HỆ THỐNG</b>. Nếu giao diện không mở được, có thể tắt bằng <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → Task Manager → chọn <code>Fall_and_Stroke_Warning_System.exe</code> → <span class="ui">End task</span>.</div></div>
+      <div class="callout tip"><span class="ico">💡</span><div>Không mở ứng dụng hai lần cùng lúc: lần mở thứ hai sẽ tranh camera với lần đầu. Nếu đang chạy ngầm, chỉ cần vào <code>http://localhost:8000</code>.</div></div>
+    </section>
+
+    <!-- 12 -->
+    <section class="step" id="tu-dong">
+      <div class="step-head"><span class="step-num">12</span><h2>Tự chạy cùng Windows (giám sát 24/7)</h2></div>
+      <ol class="steps">
+        <li>Mở <span class="ui">⚙️ Cài đặt</span>.</li>
+        <li>Gạt công tắc <b>🚀 Tự động chạy nền khi mở máy tính</b> sang bật.</li>
+        <li>Từ lần khởi động máy sau, hệ thống tự chạy ngầm với camera đã <b>LƯU MẶC ĐỊNH</b>, không cần mở tay.</li>
+      </ol>
+      <p>Gạt công tắc về tắt nếu không muốn tự chạy nữa.</p>
+    </section>
+
+    <!-- 13 -->
+    <section class="step" id="may-khac">
+      <div class="step-head"><span class="step-num">13</span><h2>Xem từ điện thoại hoặc máy tính khác trong nhà</h2></div>
+      <ol class="steps">
+        <li>Trên máy đang chạy hệ thống, mở <b>Command Prompt</b> (gõ <code>cmd</code> trong menu Start), gõ <code>ipconfig</code> và nhấn Enter. Ghi lại dòng <b>IPv4 Address</b>, ví dụ <code>192.168.1.25</code>.</li>
+        <li>Trên điện thoại hoặc máy khác <b>cùng mạng Wi-Fi</b>, mở trình duyệt và vào <code>http://192.168.1.25:8000</code> (thay bằng IP vừa ghi).</li>
+        <li>Nếu không vào được: kiểm tra đã bấm <b>Allow</b> ở hộp thoại Windows Firewall lần đầu chạy; nếu lỡ bấm Cancel, vào <i>Windows Security → Firewall &amp; network protection → Allow an app through firewall</i> và cho phép ứng dụng.</li>
+      </ol>
+      <div class="callout warn"><span class="ico">🔐</span><div>Chỉ dùng trong mạng gia đình. Không mở cổng 8000 ra Internet trên modem, vì giao diện không có mật khẩu đăng nhập.</div></div>
+    </section>
+
+    <!-- 14 -->
+    <section class="step" id="rieng-tu">
+      <div class="step-head"><span class="step-num">14</span><h2>Quyền riêng tư</h2></div>
+      <ul>
+        <li>Hình ảnh camera được xử lý <b>hoàn toàn trên máy tính của bạn</b>, không gửi lên máy chủ nào.</li>
+        <li>Muốn che mặt người trong khung hình: <span class="ui">⚙️ Cài đặt</span> → bật <b>🔒 Bảo vệ quyền riêng tư (Làm mờ mặt)</b>.</li>
+        <li>Ảnh sự cố chỉ lưu trên máy, trong thư mục <code>data\processed\events</code> của thư mục cài đặt. Bạn có thể xóa thủ công khi không cần nữa.</li>
+        <li>Dữ liệu chỉ rời máy khi bạn bật Telegram, và chỉ gửi tới bot do bạn tạo.</li>
+      </ul>
+    </section>
+
+    <!-- 15 -->
+    <section class="step" id="su-co">
+      <div class="step-head"><span class="step-num">15</span><h2>Xử lý sự cố</h2></div>
+
+      <details>
+        <summary>Không cài được: Smart App Control chặn, không có nút “Run anyway”</summary>
+        <p>Trên Windows 11 cài mới, Smart App Control chặn mọi ứng dụng chưa ký số. Thử chuột phải tệp cài → <b>Properties</b> → tích <b>Unblock</b> → OK rồi chạy lại. Nếu vẫn bị chặn, chỉ còn cách tắt Smart App Control trong <i>Windows Security → App &amp; browser control</i>. Lưu ý: đã tắt thì không bật lại được nếu không cài lại Windows.</p>
+      </details>
+
+      <details>
+        <summary>Khung camera đen hoặc báo “camera bận”</summary>
+        <ul>
+          <li>Đóng các ứng dụng khác đang dùng camera (Zoom, Teams, Zalo, Camera…).</li>
+          <li>Vào <span class="ui">⚙️ Cài đặt</span> → <span class="ui">🔍 Kiểm tra Camera</span> để chẩn đoán.</li>
+          <li>Bấm <span class="ui">🔓 Mở Cài đặt Quyền Camera Windows</span>, bật <b>Camera access</b> và <b>Let desktop apps access your camera</b>.</li>
+          <li>Thử chọn webcam khác bằng nút <span class="ui">Quét</span> (Webcam 0 / 1).</li>
+          <li>Rút ra cắm lại webcam USB, sang cổng USB khác.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Camera IP không kết nối được</summary>
+        <ul>
+          <li>Kiểm tra máy tính và camera cùng mạng; thử <code>ping 192.168.1.100</code> trong Command Prompt.</li>
+          <li>Kiểm tra lại tên đăng nhập, mật khẩu (EZVIZ dùng mã xác minh trên tem, Tapo dùng “Tài khoản camera”).</li>
+          <li>Đảm bảo RTSP/ONVIF đã bật trong app của hãng.</li>
+          <li>Kiểm tra đường dẫn bằng phần mềm VLC: <i>Media → Open Network Stream</i>, dán đường dẫn RTSP. VLC xem được thì ứng dụng cũng kết nối được.</li>
+          <li>Camera đổi IP sau khi khởi động lại modem: đặt IP tĩnh cho camera trong modem.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Video giật, FPS thấp</summary>
+        <ul>
+          <li>Cắm sạc laptop; chọn chế độ nguồn <b>Best performance</b>.</li>
+          <li>Với camera IP, dùng <b>luồng phụ</b> (Hikvision <code>102</code>, Dahua <code>subtype=1</code>, Tapo <code>stream2</code>).</li>
+          <li>Đóng bớt các chương trình nặng đang chạy.</li>
+          <li>Xem số FPS hiện tại ở mục 📊 Thống kê; khoảng 15 FPS trở lên là đủ để nhận diện.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Giao diện không mở / trang localhost:8000 không vào được</summary>
+        <ul>
+          <li>Chờ thêm 30 giây sau khi mở ứng dụng rồi tải lại trang.</li>
+          <li>Có thể ứng dụng đã chạy ngầm từ trước: chỉ cần vào <code>http://localhost:8000</code>, không mở thêm lần nữa.</li>
+          <li>Cổng 8000 bị chương trình khác chiếm: tắt chương trình đó, hoặc khởi động lại máy rồi mở lại ứng dụng.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Không nhận được tin Telegram</summary>
+        <ul>
+          <li>Kiểm tra máy tính có Internet.</li>
+          <li>Đã bấm <b>Start</b> với bot (hoặc đã nhắn một tin trong nhóm có bot) trước khi bấm <b>Lấy Chat ID tự động</b>.</li>
+          <li>Bấm <span class="ui">📨 Gửi tin thử</span> và đọc thông báo lỗi hiện ra.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Cảnh báo nhầm hoặc bỏ sót</summary>
+        <ul>
+          <li>Kiểm tra lại vị trí camera theo <a href="#lap-dat">mục 7</a>: thấy toàn thân, đủ sáng, ít bị che.</li>
+          <li>Người ra khỏi khung hình hoặc bị che khuất thì hệ thống không theo dõi được.</li>
+          <li>Hệ thống chỉ là công cụ hỗ trợ, không thay thế sự chăm sóc trực tiếp của người thân.</li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Gửi thông tin lỗi cho nhà phát triển</summary>
+        <p>Nhật ký hoạt động nằm ở <code>%LOCALAPPDATA%\Programs\Fall_and_Stroke_Warning_System\app_log.txt</code> (dán đường dẫn này vào thanh địa chỉ của File Explorer). Gửi kèm tệp này khi <a href="https://github.com/QuocCuong66/Project-monitoring-model/issues" target="_blank" rel="noopener noreferrer">báo lỗi trên GitHub</a>.</p>
+      </details>
+    </section>
+
+    <!-- 16 -->
+    <section class="step" id="go-cai-dat">
+      <div class="step-head"><span class="step-num">16</span><h2>Gỡ cài đặt</h2></div>
+      <ol class="steps">
+        <li>Tắt hệ thống bằng nút <span class="ui">TẮT HỆ THỐNG</span> trong Cài đặt.</li>
+        <li>Mở <i>Settings → Apps → Installed apps</i>, tìm <b>Fall and Stroke Warning System</b> → <span class="ui">Uninstall</span>. Hoặc dùng lối tắt gỡ cài đặt trong menu Start.</li>
+        <li>Trình gỡ cài đặt cũng xóa mục tự chạy cùng Windows.</li>
+      </ol>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>&copy; 2024–2026 Quốc Cường · <a href="index.html">Trang chủ</a> · <a href="https://github.com/QuocCuong66/Project-monitoring-model" target="_blank" rel="noopener noreferrer">Mã nguồn GitHub</a></p>
+  <p style="margin-top:8px;">Phần mềm hỗ trợ cảnh báo an toàn, không phải thiết bị y tế và không chẩn đoán bệnh.</p>
+</footer>
+
+<script>
+try {
+  const saved = localStorage.getItem('lang');
+  if (saved === 'en' || saved === 'vi') document.body.dataset.lang = saved;
+} catch (e) {}
+
+// Highlight the table-of-contents entry for the section in view
+const links = Array.from(document.querySelectorAll('.toc a'));
+const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    links.forEach(a => a.classList.remove('active'));
+    const link = byId.get(entry.target.id);
+    if (link) link.classList.add('active');
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+document.querySelectorAll('section.step').forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
