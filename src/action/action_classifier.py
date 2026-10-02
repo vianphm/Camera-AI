@@ -23,6 +23,7 @@ except ImportError:
     ORT_AVAILABLE = False
 
 from src.utils.config import resolve_model_path
+from src.utils.ort_providers import dml_provider
 
 ACTION_CLASSES: List[str] = [
     "walking",            # 0
@@ -93,7 +94,7 @@ class ActionClassifier:
             try:
                 providers = ["DmlExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
                 available = ort.get_available_providers()
-                actual_providers = [p for p in providers if p in available]
+                actual_providers = [dml_provider() if p == "DmlExecutionProvider" else p for p in providers if p in available]
                 sess_options = ort.SessionOptions()
                 if actual_providers[0] == "CPUExecutionProvider":
                     # Tiny sequence model: a single non-spinning thread avoids starving the

@@ -9,6 +9,7 @@ runtime:
   target_fps: 30
   sync_mode: false
   temporal_device: "cuda"  # ST-Transformer & Autoencoder device ("cuda" = DirectML GPU, or "cpu")
+  dml_performance_preference: "high_performance" # DirectML GPU choice: high_performance (discrete GPU), minimum_power (integrated GPU), default (adapter 0)
 
 scheduling:
   enable_tier0_motion_gating: true # Tier-0 Motion Gating (Bypass AI & throttle to 10-15 FPS when room is static)
