@@ -10,18 +10,19 @@ webcam:
   api_preference: "dshow" # "dshow" on windows, "v4l2" on linux, or "default"
 
 rtsp:
-  # Cấu hình RTSP cho Camera EZVIZ:
+  # - Model: EZVIZ CS-C6N-R105-1L3WF
+  # - Số sê-ri (Serial): BF7623187
+  # - Mã xác thực (Verification Code): YTUKMP
   # - admin: Tên tài khoản mặc định của camera EZVIZ.
-  # - VERIFICATION_CODE: Mã xác thực gồm 6 chữ cái in hoa dán dưới đáy camera EZVIZ (VD: ABCDEF).
-  # - IP_CAMERA: Địa chỉ IP của camera trong mạng WiFi (xem trong app EZVIZ, VD: 192.168.1.50).
+  # - IP_CAMERA: Địa chỉ IP của camera trong mạng WiFi ở nhà (VD: 192.168.1.50).
   # *LƯU Ý QUAN TRỌNG*: Trong App EZVIZ trên điện thoại, phải TẮT tính năng "Mã hóa hình ảnh" (Video Encryption) thì mới xem được RTSP!
   #
-  # Link luồng chính (Full HD / 2K):
-  # url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/H.264/ch1/main/av_stream"
+  # Link luồng chính (Full HD):
+  url: "rtsp://admin:YTUKMP@192.168.1.50:554/Streaming/Channels/101"
   # Hoặc:
-  url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/Streaming/Channels/101"
+  # url: "rtsp://admin:YTUKMP@192.168.1.50:554/h264/ch1/main/av_stream"
   # Link luồng phụ (Sub-stream - Mượt mà, tiết kiệm CPU cho AI):
-  # url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/Streaming/Channels/102"
+  # url: "rtsp://admin:YTUKMP@192.168.1.50:554/Streaming/Channels/102"
   reconnect_delay_seconds: 2.0
   max_reconnect_attempts: 10
   buffer_size: 1 # minimal internal buffer to avoid lag
