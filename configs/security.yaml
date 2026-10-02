@@ -1,0 +1,53 @@
+# Cấu hình Hệ thống AI Cảnh Báo Trộm Đêm Khuya (Late-Night Intrusion & Burglar Warning)
+
+security:
+  # 1. Khung giờ kích hoạt báo động ban đêm
+  schedule:
+    enabled: true
+    start_time: "22:30"        # Bắt đầu giới nghiêm (22h30 tối)
+    end_time: "05:30"          # Kết thúc giới nghiêm (05h30 sáng hôm sau)
+    always_armed: false        # Đặt true nếu muốn kích hoạt báo động 24/7 (khi cả nhà đi vắng)
+
+  # 2. Vùng cấm xâm nhập (Tọa độ chuẩn hóa từ 0.0 đến 1.0 theo [X, Y])
+  # Điểm [0, 0] là góc trên bên trái, [1, 1] là góc dưới bên phải khung hình.
+  zones:
+    - name: "San_truoc"
+      enabled: true
+      polygon:
+        - [0.05, 0.40]
+        - [0.95, 0.40]
+        - [0.98, 0.98]
+        - [0.02, 0.98]
+      alert_immediately: true   # Bước chân vào là kích hoạt báo động ngay lập tức
+      loitering_limit_seconds: 0.0
+
+    - name: "Cổng_rào"
+      enabled: true
+      polygon:
+        - [0.00, 0.15]
+        - [0.45, 0.15]
+        - [0.45, 0.65]
+        - [0.00, 0.65]
+      alert_immediately: false  # Không báo ngay, mà chờ xem có lảng vảng không
+      loitering_limit_seconds: 8.0 # Đứng trước cổng quá 8 giây mới kích hoạt báo động
+
+  # 3. Phân tích hành vi trộm cắp
+  behavior:
+    detect_crawling: true       # Phát hiện bò trườn, cúi lén lút (aspect ratio ngang > dọc)
+    detect_climbing: true       # Phát hiện leo trèo rào tường
+    min_person_confidence: 0.45 # Ngưỡng tin cậy của YOLOv8 ban đêm (0.45 tránh bắt nhầm bóng cây)
+
+  # 4. Ghi hình sự kiện (Event Video Recorder)
+  recording:
+    enabled: true
+    pre_buffer_seconds: 5       # Lưu trước 5 giây trước khi trộm bước vào
+    post_buffer_seconds: 20     # Ghi tiếp 20 giây sau khi phát hiện
+    output_dir: "data/alarm_videos"
+    video_fps: 20.0
+
+  # 5. Phản xạ hành động khi có trộm (Actions)
+  actions:
+    play_siren: true            # Hú còi báo động qua loa máy tính / loa ngoài
+    send_telegram: true         # Gửi ảnh snapshot + link video qua Telegram Bot
+    upload_gdrive: true         # Tự động đẩy video MP4 lên Google Drive (Google One)
+    gdrive_folder_name: "EZVIZ_Security_Alerts"

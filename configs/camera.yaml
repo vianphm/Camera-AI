@@ -10,7 +10,18 @@ webcam:
   api_preference: "dshow" # "dshow" on windows, "v4l2" on linux, or "default"
 
 rtsp:
-  url: "rtsp://admin:password@192.168.1.100:554/Streaming/Channels/101"
+  # Cấu hình RTSP cho Camera EZVIZ:
+  # - admin: Tên tài khoản mặc định của camera EZVIZ.
+  # - VERIFICATION_CODE: Mã xác thực gồm 6 chữ cái in hoa dán dưới đáy camera EZVIZ (VD: ABCDEF).
+  # - IP_CAMERA: Địa chỉ IP của camera trong mạng WiFi (xem trong app EZVIZ, VD: 192.168.1.50).
+  # *LƯU Ý QUAN TRỌNG*: Trong App EZVIZ trên điện thoại, phải TẮT tính năng "Mã hóa hình ảnh" (Video Encryption) thì mới xem được RTSP!
+  #
+  # Link luồng chính (Full HD / 2K):
+  # url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/H.264/ch1/main/av_stream"
+  # Hoặc:
+  url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/Streaming/Channels/101"
+  # Link luồng phụ (Sub-stream - Mượt mà, tiết kiệm CPU cho AI):
+  # url: "rtsp://admin:VERIFICATION_CODE@192.168.1.50:554/Streaming/Channels/102"
   reconnect_delay_seconds: 2.0
   max_reconnect_attempts: 10
   buffer_size: 1 # minimal internal buffer to avoid lag
