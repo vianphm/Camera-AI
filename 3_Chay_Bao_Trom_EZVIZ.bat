@@ -19,19 +19,20 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 echo ===============================================================================
-echo     AI CẢNH BÁO TRỘM ĐÊM KHUYA — CAMERA EZVIZ & GOOGLE DRIVE CLOUD
+echo     AI CẢNH BÁO TRỘM ĐÊM KHUYA & GHI HÌNH 24/7 — EZVIZ STUDIO & CLOUD
 echo ===============================================================================
-echo  [*] Lịch trực an ninh : Tự động kích hoạt từ 22h30 đêm đến 05h30 sáng
-echo  [*] Chống trộm bằng AI: YOLOv8 + ByteTrack + Vùng cấm đa giác (ROI)
-echo  [*] Lưu trữ bằng chứng: Cắt clip MP4 tự động và đẩy lên Google Drive
-echo  [*] Thông báo khẩn cấp: Telegram Bot kèm ảnh chụp và link xem video
+echo  [*] Nguồn hình ảnh    : Bắt hình trực tiếp từ cửa sổ EZVIZ Studio
+echo  [*] Ghi hình liên tục : Lưu trữ 24/7 vào thư mục data/records_24_7/ (đoạn 15p)
+echo  [*] Tự động dọn dẹp   : Xóa file cũ nhất khi đầy ổ cứng (FIFO Rolling Storage)
+echo  [*] Cảnh báo trộm đêm : Nhận diện người, hú còi và cắt clip đẩy Google Drive
 echo ===============================================================================
 echo.
+echo  [Lưu ý] Bạn hãy mở sẵn phần mềm EZVIZ Studio để xem hình camera trước!
 echo  [Mẹo] Để dừng hệ thống, nhấn phím [Q] trên cửa sổ camera hoặc đóng cửa sổ này.
 echo.
 
-:: Khởi chạy bộ giám sát an ninh
-"%~dp0.venv\Scripts\python.exe" "%~dp0run_security_monitor.py" --source rtsp
+:: Khởi chạy bộ giám sát an ninh và ghi hình 24/7
+"%~dp0.venv\Scripts\python.exe" "%~dp0run_security_monitor.py" --source screen
 
 echo.
 echo [Hệ thống đã dừng an toàn]

@@ -51,3 +51,13 @@ security:
     send_telegram: true         # Gửi ảnh snapshot + link video qua Telegram Bot
     upload_gdrive: true         # Tự động đẩy video MP4 lên Google Drive (Google One)
     gdrive_folder_name: "EZVIZ_Security_Alerts"
+
+  # 6. Ghi hình liên tục 24/7 (Continuous 24/7 Storage)
+  continuous_recording:
+    enabled: true               # BẬT ghi hình lưu trữ liên tục 24/7
+    output_dir: "data/records_24_7"
+    segment_duration_minutes: 15.0 # Cắt mỗi đoạn 15 phút
+    max_storage_gb: 40.0        # Giới hạn tối đa 40 GB (khi đầy tự xóa đoạn cũ nhất)
+    retention_days: 7           # Tự động xóa video cũ hơn 7 ngày
+    video_fps: 20.0
+    sync_to_gdrive: false       # Đặt true nếu muốn tải toàn bộ các đoạn 15 phút lên Google Drive

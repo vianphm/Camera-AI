@@ -38,12 +38,14 @@ from src.camera.stream import CameraStream
 from src.camera.webcam import WebcamStream
 from src.camera.rtsp import RTSPStream
 from src.camera.video_file import VideoFileStream
+from src.camera.screen_capture import ScreenCaptureStream
 from src.detection.motion_gater import MotionGater
 from src.detection.person_detector import YOLOv8PersonDetector
 from src.tracking.track_manager import ByteTrackManager
 from src.security.time_guard import TimeGuard
 from src.security.zone_monitor import ZoneMonitor, IntrusionEvent
 from src.security.event_recorder import EventVideoRecorder
+from src.security.continuous_recorder import Continuous247Recorder
 from src.security.siren import SirenPlayer
 from src.alerts.gdrive_uploader import GoogleDriveUploader
 from src.alerts.telegram import TelegramClient, load_telegram_settings
@@ -75,7 +77,10 @@ def load_security_configs() -> Dict[str, Any]:
 
 def init_camera(source: str, rtsp_url: Optional[str], device_index: int, cam_cfg: dict) -> CameraStream:
     """Khởi tạo luồng camera phù hợp."""
-    if source == "rtsp":
+    if source == "screen":
+        print("[*] Đang khởi động chế độ BẮT HÌNH TRỰC TIẾP TỪ CỬA SỔ EZVIZ STUDIO...")
+        stream = ScreenCaptureStream()
+    elif source == "rtsp":
         url = rtsp_url or cam_cfg.get("rtsp", {}).get("url")
         if not url or "VERIFICATION_CODE" in url:
             print("\n❌ LƯU Ý QUAN TRỌNG VỀ CAMERA EZVIZ:")
@@ -133,7 +138,7 @@ class SecurityMonitorApp:
         else:
             print("  • Telegram Bot Alerts     : [CHƯA CẤU HÌNH] (Có thể cấu hình trong Web Dashboard hoặc App)")
 
-        # 6. Khởi tạo Event Video Recorder
+        # 6. Khởi tạo Event Video Recorder (Khi có trộm)
         rec_cfg = self.sec_cfg.get("recording", {})
         self.recorder = EventVideoRecorder(
             fps=float(rec_cfg.get("video_fps", 20.0)),
@@ -143,11 +148,29 @@ class SecurityMonitorApp:
             on_video_completed=self._handle_recorded_video,
         )
 
+        # 6b. Khởi tạo Continuous 24/7 Recorder (Lưu trữ liên tục 24/7)
+        c_rec_cfg = self.sec_cfg.get("continuous_recording", {})
+        self.continuous_recorder = Continuous247Recorder(
+            enabled=c_rec_cfg.get("enabled", True),
+            output_dir=c_rec_cfg.get("output_dir", "data/records_24_7"),
+            segment_duration_minutes=float(c_rec_cfg.get("segment_duration_minutes", 15.0)),
+            max_storage_gb=float(c_rec_cfg.get("max_storage_gb", 40.0)),
+            retention_days=int(c_rec_cfg.get("retention_days", 7)),
+            fps=float(c_rec_cfg.get("video_fps", 20.0)),
+            on_segment_completed=self._handle_continuous_segment if c_rec_cfg.get("sync_to_gdrive", False) else None,
+        )
+
         # 7. AI Detection & Tracking
         min_conf = float(self.sec_cfg.get("behavior", {}).get("min_person_confidence", 0.45))
         self.detector = YOLOv8PersonDetector(model_path="yolov8n.pt", conf_threshold=min_conf)
         self.tracker = ByteTrackManager()
         self.motion_gater = MotionGater(enabled=True, min_motion_ratio=0.001)
+
+    def _handle_continuous_segment(self, segment_path: str) -> None:
+        """Đẩy đoạn ghi 24/7 lên Google Drive (nếu bật)."""
+        if self.gdrive_uploader.is_ready:
+            print(f"☁️ [GDRIVE 24/7] Đang đồng bộ đoạn video 24/7: {Path(segment_path).name}...")
+            self.gdrive_uploader.upload_file(segment_path, mime_type="video/mp4")
 
     def _handle_recorded_video(self, video_path: str, metadata: dict) -> None:
         """Callback khi video sự kiện ghi xong -> Đẩy lên Google Drive & Gửi Telegram."""
@@ -222,8 +245,11 @@ class SecurityMonitorApp:
                 if (w, h) != (self.zone_monitor.frame_width, self.zone_monitor.frame_height):
                     self.zone_monitor.update_zones(self.sec_cfg.get("zones", []), (w, h))
 
-                # Đẩy frame vào bộ nhớ đệm video (Pre-buffer)
+                # Đẩy frame vào bộ nhớ đệm video sự kiện (Pre-buffer)
                 self.recorder.push_frame(frame)
+
+                # Ghi hình lưu trữ liên tục 24/7
+                self.continuous_recorder.push_frame(frame)
 
                 # Tier-0 Motion Gating: Tiết kiệm tài nguyên nếu cảnh tĩnh ban đêm
                 gate = self.motion_gater.evaluate(frame)
@@ -288,7 +314,8 @@ class SecurityMonitorApp:
                     # Vẽ Banner trạng thái trên cùng
                     hud_color = (0, 0, 180) if is_armed else (50, 100, 50)
                     cv2.rectangle(vis_frame, (0, 0), (w, 40), hud_color, -1)
-                    status_text = f"AI CAMERA AN NINH | {self.time_guard.get_status_str()} | FPS: {fps_display:.1f}"
+                    rec_status = " | REC 24/7" if self.continuous_recorder.enabled else ""
+                    status_text = f"AI CAMERA AN NINH | {self.time_guard.get_status_str()}{rec_status} | FPS: {fps_display:.1f}"
                     cv2.putText(vis_frame, status_text, (15, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
 
                     # Nếu đang có báo động, vẽ viền nhấp nháy đỏ quanh màn hình
@@ -318,6 +345,7 @@ class SecurityMonitorApp:
                     fps_start = time.time()
 
         finally:
+            self.continuous_recorder.close()
             self.stream.stop()
             if show_gui:
                 cv2.destroyAllWindows()
@@ -326,7 +354,7 @@ class SecurityMonitorApp:
 
 def main():
     parser = argparse.ArgumentParser(description="AI Cảnh Báo Trộm Đêm Khuya & Lưu Cloud Google Drive")
-    parser.add_argument("--source", type=str, choices=["rtsp", "webcam", "video"], default="rtsp", help="Nguồn camera (mặc định: rtsp cho camera EZVIZ)")
+    parser.add_argument("--source", type=str, choices=["screen", "rtsp", "webcam", "video"], default="screen", help="Nguồn camera (mặc định: screen để bắt hình từ EZVIZ Studio, hoặc rtsp, webcam, video)")
     parser.add_argument("--rtsp-url", type=str, default=None, help="Link RTSP nếu không dùng trong config")
     parser.add_argument("--device-index", type=int, default=0, help="Webcam device index")
     parser.add_argument("--always-armed", action="store_true", help="Bật chế độ báo động 24/7 (bỏ qua khung giờ đêm)")
