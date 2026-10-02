@@ -128,6 +128,129 @@ There is no public video dataset of real strokes: the system flags observable wa
 
 ---
 
+## 🛡️ HỆ THỐNG AI CẢNH BÁO TRỘM ĐÊM KHUYA & GHI HÌNH LƯU TRỮ 24/7
+
+Hệ thống được mở rộng chuyên biệt cho bài toán **An ninh Gia đình & Chống đột nhập ban đêm** kết hợp **Ghi hình lưu trữ liên tục 24/7**, hỗ trợ toàn diện các dòng camera phổ biến như **EZVIZ, Hikvision, Dahua, Imou...**
+
+```text
+Camera EZVIZ / RTSP Stream / Screen Capture (EZVIZ Studio)
+   ↓
+[1] Bộ lọc khung giờ giới nghiêm ban đêm (22h30 - 05h30)
+   ↓
+[2] Tier-0 Motion Gater (0% GPU/CPU khi cảnh tĩnh ban đêm)
+   ↓
+[3] YOLOv8 Person Detector + ByteTrack Multi-Tracker (Triệt tiêu 100% báo động giả)
+   ↓
+[4] Bộ giám sát Vùng cấm đa giác (Polygon ROI) & Lảng vảng (Loitering > 8s)
+   ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│                      HAI LUỒNG XỬ LÝ SONG SONG                        │
+│                                                                        │
+│  [A] Luồng Ghi Hình Liên Tục 24/7 (Continuous 24/7 Storage):          │
+│      • Tự động chia nhỏ video 15 phút / file (MP4).                    │
+│      • Đóng dấu ngày giờ thời gian thực (Timestamp Burn-in).           │
+│      • Tự động dọn dẹp ổ cứng khi đầy 40GB (FIFO Rolling Storage).     │
+│                                                                        │
+│  [B] Luồng Cảnh Báo Trộm Tức Thì (Instant Intrusion Alarm):           │
+│      • Hú còi cảnh báo tần số khẩn cấp qua loa máy tính.               │
+│      • Cắt video sự kiện (Pre-buffer 5s trước + Ghi tiếp 20s sau).    │
+│      • Tự động upload clip MP4 lên Google Drive (Google One).          │
+│      • Bắn tin nhắn khẩn cấp + ảnh chụp hiện trường về Telegram Bot.  │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 1. Hướng Dẫn Khởi Chạy Nhanh (1-Click)
+
+#### Cách 1: Chạy bằng file Batch trên Windows (Khuyên dùng)
+Chỉ cần nhấp đúp vào:
+👉 **[`3_Chay_Bao_Trom_EZVIZ.bat`](3_Chay_Bao_Trom_EZVIZ.bat)**
+
+#### Cách 2: Chạy bằng dòng lệnh Python
+```powershell
+# Chế độ 1: Bắt hình trực tiếp từ cửa sổ EZVIZ Studio (dành cho khi máy tính khác mạng WiFi với camera):
+.\.venv\Scripts\python.exe run_security_monitor.py --source screen
+
+# Chế độ 2: Kết nối trực tiếp RTSP camera nội bộ:
+.\.venv\Scripts\python.exe run_security_monitor.py --source rtsp
+
+# Chế độ 3: Chạy thử nghiệm ngay bằng Webcam máy tính:
+.\.venv\Scripts\python.exe run_security_monitor.py --source webcam --always-armed
+```
+
+---
+
+### 2. Hai Chế Độ Kết Nối Camera EZVIZ Linh Hoạt
+
+| Tình huống | Chế độ kết nối | Cách thực hiện |
+| :--- | :--- | :--- |
+| **Khi bạn ở Công ty (Khác mạng WiFi với camera ở nhà)** | **Bắt hình từ EZVIZ Studio (`--source screen`)** | Mở ứng dụng **EZVIZ Studio** trên máy tính để xem camera ở nhà $\rightarrow$ Khởi chạy `3_Chay_Bao_Trom_EZVIZ.bat`. AI sẽ tự động đọc trực tiếp khung hình từ EZVIZ Studio mà không cần mở port mạng! |
+| **Khi bạn ở Nhà (Chung mạng WiFi với camera EZVIZ)** | **Kết nối RTSP Trực tiếp (`--source rtsp`)** | Mở Web Dashboard tại `http://localhost:8000` $\rightarrow$ Bấm nút `•••` $\rightarrow$ Chọn **EZVIZ** $\rightarrow$ Điền Mã xác thực và IP camera $\rightarrow$ Bấm **Áp dụng**. |
+
+> [!CAUTION]
+> **LƯU Ý TỐI QUAN TRỌNG VỚI CAMERA EZVIZ**:
+> Trong ứng dụng EZVIZ trên điện thoại, bạn **BẮT BUỘC PHẢI TẮT "MÃ HÓA HÌNH ẢNH" (Video Encryption)** (Vào Cài đặt camera $\rightarrow$ Mã hóa hình ảnh $\rightarrow$ Gạt sang TẮT). Nếu bật mã hóa, máy tính sẽ không giải mã được video RTSP.
+
+* Chuỗi link RTSP chuẩn của EZVIZ:
+  ```text
+  rtsp://admin:MAXACMINH@IP_CAMERA:554/h264/ch1/main/av_stream
+  ```
+  *(Trong đó `MAXACMINH` là mã xác thực 6 chữ cái in hoa dưới đáy camera, ví dụ: `YTUKMP`).*
+
+---
+
+### 3. Tự Động Đẩy Video Lên Google Drive (Google One)
+
+Hệ thống tích hợp sẵn module tự động đưa các đoạn clip bằng chứng lên thư mục `EZVIZ_Security_Alerts` trên Google Drive của bạn:
+
+1. Chạy script xác thực tài khoản Google một lần duy nhất:
+   ```powershell
+   .\.venv\Scripts\python.exe scripts/setup_gdrive.py
+   ```
+2. Nếu chưa có file `configs/credentials.json`, script sẽ hướng dẫn bạn vào [Google Cloud Console](https://console.cloud.google.com/):
+   * Bật **Google Drive API**.
+   * Tạo **Credentials** $\rightarrow$ Chọn **OAuth client ID** (Loại: *Desktop app*).
+   * Tải file JSON về, đổi tên thành `credentials.json` và chép vào thư mục `configs/`.
+3. Chạy lại `python scripts/setup_gdrive.py` $\rightarrow$ Trình duyệt mở ra $\rightarrow$ Bấm **Đăng nhập & Cho phép (Allow)**.
+4. Từ nay trở đi, mỗi khi có kẻ trộm, video sẽ tự động bay lên Google Drive và gửi link trực tiếp về Telegram cho bạn!
+
+---
+
+### 4. Triển Khai Chạy 24/7 Trên Google Cloud VM (Không Cần Bật Máy Tính)
+
+Nếu bạn không muốn phải bật máy tính ở nhà 24/24, bạn có thể chạy toàn bộ hệ thống này trên máy chủ ảo **Google Cloud Compute Engine** (tận dụng gói miễn phí $300):
+
+#### Bước A: Tạo máy chủ 1-Click trên Google Cloud Shell
+Mở Google Cloud Shell và dán lệnh sau:
+```bash
+gcloud compute instances create camera-ai-server \
+    --zone=asia-southeast1-a \
+    --machine-type=e2-medium \
+    --image-family=ubuntu-2204-lts \
+    --image-project=ubuntu-os-cloud \
+    --boot-disk-size=30GB \
+    --tags=http-server,https-server
+```
+
+#### Bước B: Kết nối và Cài đặt tự động
+```bash
+# 1. SSH vào máy chủ vừa tạo
+gcloud compute ssh camera-ai-server --zone=asia-southeast1-a
+
+# 2. Cài đặt toàn bộ môi trường AI trong 1 lệnh duy nhất:
+sudo apt update && sudo apt install -y python3-pip python3-venv git ffmpeg libgl1-mesa-glx screen && git clone https://github.com/vianphm/Camera-AI.git && cd Camera-AI && python3 -m venv .venv && source .venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt ultralytics
+```
+
+#### Bước C: Cho hệ thống chạy ngầm vĩnh viễn
+```bash
+screen -S security_ai
+python run_security_monitor.py --source rtsp --no-gui
+# Bấm Ctrl + A rồi bấm D để thoát ra màn hình chính, hệ thống sẽ tự động chạy 24/7/365 trên mây!
+```
+
+---
+
 ## Documentation Links
 
 - [**`ARCHITECTURE.md`**](ARCHITECTURE.md): Comprehensive system architecture, data flows, and state machine.
